@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="bookmark-api" content="https://toc-bookmark-experimental-246902611372.us-central1.run.app">
+  <meta name="referrer" content="no-referrer">
+  <title>PDF Bookmark Creator · Experimental</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, sans-serif; color: #182820; background: #f4f6f2; --green: #24583b; --line: #dce4d8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 26px 24px; }
+    main { max-width: 760px; margin: auto; }
+    body.reviewing main { max-width: 1600px; }
+    .topbar, .actions, .review-heading, .page-controls, .list-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .topbar { justify-content: space-between; margin-bottom: 26px; min-height: 34px; }
+    .brand { font-size: 14px; font-weight: 750; color: var(--green); }
+    .badge { font-size: 11px; background: #e8eee4; padding: 4px 7px; border-radius: 5px; margin-left: 7px; font-weight: 500; }
+    .card { background: white; border: 1px solid var(--line); border-radius: 14px; padding: 30px; }
+    h1 { font-size: clamp(25px, 4vw, 36px); margin: 0 0 10px; letter-spacing: -.035em; }
+    h2 { font-size: 16px; margin: 0; }
+    p { line-height: 1.55; color: #526158; }
+    label { display: block; font-weight: 600; margin: 20px 0 8px; }
+    input, textarea { max-width: 100%; width: 100%; padding: 13px; border: 1px solid #c7d2c3; border-radius: 7px; background: #fafcf9; font: inherit; }
+    button, .button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 7px; padding: 11px 16px; background: var(--green); color: white; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #8badf0; outline-offset: 3px; }
+    a { color: var(--green); }
+    .secondary { background: #e9efe6; color: var(--green); }
+    .quiet { background: transparent; color: #526158; padding: 7px 9px; font-weight: 500; }
+    .small { font-size: 13px; }
+    .muted { color: #69776d; }
+    .status { margin: 16px 0; padding: 14px 17px; background: #ebf2e5; border-radius: 9px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+    .error { background: #fff0e9; color: #8b3518; }
+    progress { display: block; width: 100%; margin: 18px 0 8px; accent-color: var(--green); }
+    #login button, #submit, #import-submit { margin-top: 18px; }
+    .file-option { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 18px; }
+    .file-option summary { cursor: pointer; color: var(--green); font-size: 14px; }
+    .review-heading { justify-content: space-between; margin: 20px 0 18px; }
+    .review-heading h1 { font-size: clamp(23px, 3vw, 30px); }
+    #book-name { margin: 3px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+    #review-summary { margin: 8px 0 0; font-size: 14px; }
+    .review-layout { display: grid; grid-template-columns: minmax(270px, 340px) minmax(0, 1fr); height: 60dvh; min-height: 240px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: white; }
+    .bookmark-pane { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+    .list-tools { padding: 17px 17px 13px; border-bottom: 1px solid var(--line); justify-content: space-between; }
+    .filter { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; margin: 0; color: #536055; }
+    .filter input { width: 15px; height: 15px; margin: 0; accent-color: var(--green); }
+    .bookmark-scroll { overflow: auto; flex: 1; padding: 8px; }
+    #bookmark-list { list-style: none; padding: 0; margin: 0; }
+    #unmapped-section { margin: 16px 3px 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+    #unmapped-list { list-style: none; padding: 0; margin: 0; }
+    #unmapped-list li { margin: 12px 0; padding: 9px; background: #fff8e9; border-radius: 7px; }
+    #unmapped-list img { display: block; max-width: 100%; max-height: 100px; margin: 7px 0; }
+    #unmapped-list button { margin-top: 8px; font-size: 12px; padding: 7px 9px; }
+    .bookmark { display: block; width: 100%; text-align: left; padding: 12px 11px 12px calc(11px + var(--indent, 0px)); margin: 2px 0; background: white; color: #253a2c; font-weight: 500; border: 1px solid transparent; border-radius: 7px; }
+    .bookmark:hover { background: #f1f5ed; }
+    .bookmark[aria-current="true"] { background: #e9f1e2; border-color: #b7cbae; }
+    .bookmark-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+    .bookmark-title { overflow-wrap: anywhere; line-height: 1.4; }
+    .bookmark-page { flex: 0 0 auto; color: #637365; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .bookmark input, .bookmark textarea { padding: 7px; font-size: 13px; margin: 3px 0; }
+    .bookmark-title-input { display: block; width: 100%; resize: none; overflow: hidden; line-height: 1.4; }
+    .bookmark-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+    .bookmark-controls input { width: 68px; }
+    .bookmark-controls button { padding: 5px 7px; font-size: 12px; }
+    .drag-handle { cursor: grab; color: #687668; padding: 5px; }
+    .drop-before { border-top: 3px solid var(--green); }
+    .drop-after { border-bottom: 3px solid var(--green); }
+    .editor-actions { padding: 10px 16px; border-bottom: 1px solid var(--line); }
+    .editor-actions button { padding: 7px 9px; font-size: 12px; }
+    #edit-status { margin: 7px 0 0; font-size: 12px; }
+    .flag-label { display: block; color: #956013; font-size: 11px; font-weight: 650; margin-top: 6px; }
+    .flag-reason { display: block; font-size: 12px; color: #805c2c; line-height: 1.4; margin-top: 4px; }
+    .empty { padding: 12px; color: #69776d; font-size: 14px; }
+    .list-footnote { padding: 10px 16px; margin: 0; border-top: 1px solid var(--line); font-size: 11px; color: #738074; }
+    .preview-pane { display: flex; flex-direction: column; min-height: 0; background: #d9ddda; }
+    .page-controls { flex-shrink: 0; padding: 10px 13px; background: #f8faf6; border-bottom: 1px solid var(--line); justify-content: center; font-size: 13px; }
+    .page-controls button { padding: 6px 10px; }
+    .page-controls label { display: inline; margin: 0; font-size: 13px; font-weight: 500; }
+    .page-controls input { width: 67px; padding: 6px; text-align: center; font-size: 13px; }
+    .page-controls a { margin-left: auto; font-size: 12px; }
+    #pdf-holder { flex: 1; min-height: 0; min-width: 0; display: grid; place-items: center; overflow: hidden; padding: 12px; }
+    #pdf-holder canvas { display: block; max-width: 100%; max-height: 100%; background: white; box-shadow: 0 1px 7px #0003; }
+    #preview-status { flex-shrink: 0; margin: 0; padding: 5px 12px; font-size: 12px; text-align: center; }
+    .review-footer { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 12px; font-size: 12px; color: #69776d; }
+    .review-footer p { margin: 0 auto 0 0; font-size: 12px; }
+    .naming { background: white; border: 1px solid var(--line); border-radius: 9px; padding: 12px 16px; margin-bottom: 14px; }
+    .naming summary { cursor: pointer; font-size: 13px; color: #536055; }
+    #filename-preview { display: block; margin-top: 6px; color: #233c2a; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; }
+    .naming-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 15px; }
+    .naming-fields label { margin: 0; font-size: 12px; }
+    .naming-fields input, .contributor-row input, .contributor-row select { margin-top: 6px; padding: 9px; font-size: 13px; }
+    .wide { grid-column: 1 / -1; }
+    .contributor-heading { display: flex; align-items: center; justify-content: space-between; }
+    .contributor-heading button { padding: 6px 9px; font-size: 12px; }
+    .contributor-row { display: grid; grid-template-columns: 110px minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-top: 8px; }
+    .contributor-row select { width: 100%; border: 1px solid #c7d2c3; border-radius: 7px; background: #fafcf9; }
+    .contributor-row button { padding: 9px 8px; }
+    #naming-note { margin-bottom: 0; }
+    [hidden] { display: none !important; }
+    @media (max-width: 760px) {
+      body { padding: 16px 12px; }
+      .card { padding: 23px; }
+      .topbar { margin-bottom: 20px; }
+      .review-layout { grid-template-columns: minmax(170px, 36%) minmax(0, 1fr); }
+      .list-tools { padding: 12px; }
+      .bookmark { font-size: 12px; padding: 10px 7px 10px calc(7px + var(--indent, 0px)); }
+      .bookmark-line { display: block; }
+      .bookmark-page { display: block; margin-top: 4px; }
+      .page-controls { gap: 5px; padding: 8px; }
+      .page-controls a { width: 100%; text-align: center; margin: 0; }
+      .naming-fields { grid-template-columns: 1fr; }
+      .contributor-row { grid-template-columns: 95px minmax(0, 1fr); }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header class="topbar">
+    <div class="brand">DTL · PDF Bookmark Creator <span class="badge">Experimental</span></div>
+    <div id="account-actions" class="actions" hidden><button id="new-book" class="quiet" hidden>Upload another PDF</button><button id="logout" class="quiet">Sign out</button></div>
+  </header>
+  <section id="welcome" class="card">
+    <h1>A scanned PDF, with bookmarks.</h1>
+    <p>Paste a Dropbox PDF link. Luna reads the contents; we build the bookmarks and check where they lead. Review the PDF here, then download your copy.</p>
+    <form id="login" hidden>
+      <label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required><button>Continue</button>
+    </form>
+    <form id="import" hidden>
+      <label for="dropbox-url">Paste a Dropbox or Internet Archive PDF link</label><input id="dropbox-url" type="url" autocomplete="off" placeholder="https://www.dropbox.com/… or https://archive.org/download/…/book.pdf" maxlength="4096" required>
+      <p class="small">The PDF goes directly from Dropbox to Google Cloud. Nothing needs to be downloaded to your computer first. Keep this page open until it finishes.</p>
+      <button id="import-submit">Create bookmarks from Dropbox</button>
+    </form>
+    <details id="file-upload-option" class="file-option" hidden><summary>Or choose a PDF already on your computer</summary><form id="upload" hidden>
+      <label for="pdf">Choose a scanned PDF</label><input id="pdf" type="file" accept="application/pdf,.pdf" required>
+      <p class="small">Up to 512 MiB. Processing runs in Google Cloud. Keep this page open until it finishes. An interrupted job retains any available results but does not automatically resume.</p>
+      <button id="submit">Create bookmarks</button>
+    </form></details>
+    <p class="small muted">Downloading deletes this job's server copies after the complete PDF reaches your browser. Jobs also have a four-hour cleanup backstop. Keep the downloaded PDF.</p>
+  </section>
+  <progress id="progress" max="100" value="0" hidden></progress>
+  <div id="status" class="status" role="status" aria-live="polite">Checking access…</div>
+  <button id="start-job" type="button" hidden>Start processing</button>
+  <section id="workspace" hidden>
+    <div id="review" hidden>
+      <header class="review-heading">
+        <div><h1>Review your bookmarks</h1><p id="book-name"></p><p id="review-summary"></p></div><button id="download" type="button" hidden>Download & delete server copies</button>
+      </header>
+      <p class="small muted">After the whole PDF reaches your browser, downloading permanently deletes the uploaded PDF, results, crops and extracted text from this job on the server. Previewing does not delete anything. The browser cannot confirm that you saved the file to disk.</p>
+      <details class="naming">
+        <summary>Download name & metadata<span id="filename-preview" aria-live="polite"></span></summary>
+        <form id="naming-form" class="naming-fields">
+          <label class="wide" for="name-title">Title<input id="name-title" type="text" autocomplete="off"></label>
+          <div class="wide">
+            <div class="contributor-heading"><h2>Contributors</h2><button id="add-contributor" type="button" class="secondary">Add contributor</button></div>
+            <div id="contributors"></div><p id="no-contributors" class="small muted">No contributors supplied. Add names if needed.</p>
+          </div>
+          <label for="name-mms">MMS ID<input id="name-mms" type="text" inputmode="numeric" autocomplete="off"></label>
+          <label for="name-oclc">OCLC number<input id="name-oclc" type="text" inputmode="numeric" autocomplete="off"></label>
+          <label for="name-source">Source code<input id="name-source" type="text" autocomplete="off"></label>
+          <p id="naming-note" class="wide small muted">Uses the live service's filename rules. These edits change the download name only, not the PDF or its bookmarks. Check suggested metadata before downloading.</p>
+        </form>
+      </details>
+      <div class="review-layout">
+        <aside class="bookmark-pane" aria-label="PDF bookmarks">
+          <div class="list-tools"><h2>Bookmarks</h2><label class="filter"><input id="flags-only" type="checkbox"> Flagged only</label></div>
+          <div class="editor-actions"><div class="actions"><button id="add-bookmark" type="button" class="secondary">Add bookmark</button><button id="save-bookmarks" type="button" disabled>Save all</button><button id="discard-bookmarks" type="button" class="quiet" disabled>Discard</button></div><p id="edit-status" role="status" aria-live="polite">No unsaved edits.</p></div>
+          <nav class="bookmark-scroll" aria-label="Jump to a bookmark"><ol id="bookmark-list"></ol><p id="empty-list" class="empty" hidden></p>
+            <section id="unmapped-section" aria-label="Entries needing a destination" hidden><h2>Needs a destination</h2><p class="small">These entries were not automatically placed in the PDF. Find the right page in the preview, then add a bookmark. These original notes remain even after manual edits.</p><ul id="unmapped-list"></ul></section>
+          </nav>
+          <p class="list-footnote">Use PDF page numbers. Drag a row above/below another to move it with its children; ↑/↓ move within its level. Deleting a parent keeps its children. Save before downloading. Existing review notes are retained.</p>
+        </aside>
+        <section class="preview-pane" aria-label="PDF preview">
+          <form id="page-navigation" class="page-controls">
+            <button id="previous-page" type="button" class="secondary" aria-label="Previous PDF page">← Previous</button>
+            <label for="page-number">Page</label><input id="page-number" type="number" min="1" value="1" aria-label="PDF page number"><span id="page-total"></span>
+            <button id="next-page" type="button" class="secondary" aria-label="Next PDF page">Next →</button><a id="open-pdf" target="_blank" rel="noopener">Open PDF in a tab ↗</a>
+          </form>
+          <div id="pdf-holder" aria-busy="false"></div><p id="preview-status" role="status" aria-live="polite"></p>
+        </section>
+      </div>
+      <footer class="review-footer"><p id="review-note"></p><a id="exceptions" target="_blank" rel="noopener" hidden>Review details</a><span>Four-hour cleanup backstop.</span></footer>
+    </div>
+    <div id="partial-links" class="actions" hidden><a id="partial-report" class="button secondary" target="_blank" rel="noopener" hidden>View available results</a><button id="partial-download" type="button" hidden>Download & delete server copies</button></div>
+    <div id="download-actions" class="card" hidden>
+      <p id="download-status" role="status" aria-live="polite"></p>
+      <div class="actions"><button id="cancel-download" type="button" class="secondary" hidden>Cancel transfer</button><button id="retry-delete" type="button" class="secondary" hidden>Retry server deletion</button><a id="save-again" class="button" hidden>Save browser copy again</a></div>
+      <p id="browser-copy-note" class="small muted" hidden>The PDF is held in this browser tab so you can save it again if needed. Keep this tab open until your saved file is safe. Leaving, signing out or starting another book releases this browser copy.</p>
+    </div>
+  </section>
+</main>
+<script type="module">
+  import { buildFilename, defaultNamingMetadata } from './assets/naming.js';
+  import { createPdfPreview } from './assets/pdf-preview.js';
+  import { createApiClient } from './assets/api-client.js';
+  const el = id => document.getElementById(id);
+  const apiClient = createApiClient(document.querySelector('meta[name="bookmark-api"]').content || location.origin);
+  const pdfPreview = createPdfPreview(el('pdf-holder'), el('preview-status'),
+    () => import(apiClient.assetUrl('/assets/pdfjs/build/pdf.mjs')), apiClient);
+  const homeUrl = new URL('./', location.href);
+  const reviewUrl = job => { const url = new URL(homeUrl); url.searchParams.set('job', job); return url.href; };
+  let cropAbort = new AbortController(), viewAbort = new AbortController(), cropUrls = [], openedUrls = [], pendingViews = new Set();
+  let polling, loadedReview, reviewData, currentPage = 1, activeRow, currentJob, partialData, startingJob;
+  let transfer, browserCopyUrl, pendingDeletion, deletedJob, deleting = false;
+  let draftRows = [], savedBookmarkJson = '[]', savingBookmarks = false, draggedRow, leavingConfirmed = false;
+  function bookmarkFields(rows) {
+    return rows.map(({ id, title, pdf_page, level }) => ({ id, title, pdf_page, level }));
+  }
+  function subtreeEnd(rows, index) {
+    let end = index + 1;
+    while (end < rows.length && rows[end].level > rows[index].level) end++;
+    return end;
+  }
+  function deleteBookmark(rows, id) {
+    const index = rows.findIndex(row => row.id === id);
+    if (index < 0) return rows;
+    const end = subtreeEnd(rows, index);
+    return rows.flatMap((row, position) => position === index ? [] : [{ ...row,
+      level: position > index && position < end ? row.level - 1 : row.level }]);
+  }
+  function moveBookmark(rows, id, targetId, after) {
+    const index = rows.findIndex(row => row.id === id), target = rows.findIndex(row => row.id === targetId);
+    if (index < 0 || target < 0) return rows;
+    const end = subtreeEnd(rows, index);
+    if (target >= index && target < end) return rows;
+    const delta = rows[target].level - rows[index].level;
+    const moved = rows.slice(index, end).map(row => ({ ...row, level: row.level + delta }));
+    const remaining = rows.filter((row, position) => position < index || position >= end);
+    const at = remaining.findIndex(row => row.id === targetId);
+    remaining.splice(after ? subtreeEnd(remaining, at) : at, 0, ...moved);
+    return remaining;
+  }
+  function siblingTarget(rows, id, direction) {
+    const index = rows.findIndex(row => row.id === id);
+    if (index < 0) return null;
+    let at = direction > 0 ? subtreeEnd(rows, index) : index - 1;
+    if (direction < 0) while (at >= 0 && rows[at].level > rows[index].level) at--;
+    return at >= 0 && at < rows.length && rows[at].level === rows[index].level ? rows[at].id : null;
+  }
+  function bookmarksDirty() { return JSON.stringify(bookmarkFields(draftRows)) !== savedBookmarkJson; }
+  function editorBusy() { return !!(savingBookmarks || transfer || deleting || pendingDeletion); }
+  function refreshEditorState() {
+    const dirty = bookmarksDirty(), busy = editorBusy();
+    el('save-bookmarks').disabled = busy || !dirty; el('discard-bookmarks').disabled = busy || !dirty;
+    el('add-bookmark').disabled = busy;
+    el('edit-status').textContent = savingBookmarks ? 'Saving edits…' : dirty ? 'Unsaved edits — save or discard before downloading.' : 'No unsaved edits.';
+    for (const control of el('bookmark-list').querySelectorAll('[data-editor-control]')) control.disabled = busy || control.dataset.unavailable === 'true';
+    refreshUnmappedActions();
+    for (const row of el('bookmark-list').children) row.draggable = !busy;
+    el('download').disabled = !!(transfer || deleting || savingBookmarks || dirty);
+    el('partial-download').disabled = !!(transfer || deleting || savingBookmarks || dirty);
+  }
+  function message(text, error = false) { el('status').hidden = !text; el('status').textContent = text; el('status').classList.toggle('error', error); fitReviewLayout(); }
+  function fitBookmarkTitles() {
+    for (const title of el('bookmark-list').querySelectorAll('textarea')) { title.style.height = 'auto'; title.style.height = title.scrollHeight + 2 + 'px'; }
+  }
+  function fitReviewLayout() {
+    if (el('review').hidden) return;
+    const layout = document.querySelector('.review-layout'), footer = document.querySelector('.review-footer');
+    layout.style.height = Math.max(240, Math.floor(window.innerHeight - layout.getBoundingClientRect().top
+      - footer.getBoundingClientRect().height - parseFloat(getComputedStyle(footer).marginTop)
+      - parseFloat(getComputedStyle(document.body).paddingBottom))) + 'px';
+    fitBookmarkTitles();
+  }
+  function inputBusy(busy) { for (const id of ['submit', 'import-submit', 'pdf', 'dropbox-url']) el(id).disabled = busy; }
+  function localUrl(value) {
+    if (typeof value !== 'string' || !value) return null;
+    try { return apiClient.url(value); } catch { return null; }
+  }
+  function link(id, value) { const url = id === 'partial-report' && value ? reviewUrl(currentJob) : localUrl(value); el(id).hidden = !url; if (url) el(id).href = url; }
+  function releaseCropViews() {
+    cropAbort.abort(); cropAbort = new AbortController();
+    for (const url of cropUrls) URL.revokeObjectURL(url); cropUrls = [];
+  }
+  async function loadProtectedImage(image, url) {
+    const signal = cropAbort.signal;
+    try {
+      const response = await apiClient.request(url, { signal });
+      if (!response.ok || !response.headers.get('Content-Type')?.startsWith('image/png')) throw new Error('Crop unavailable');
+      const blob = await response.blob(); if (signal.aborted) return;
+      image.src = URL.createObjectURL(blob); cropUrls.push(image.src);
+    } catch (error) { if (!signal.aborted) image.alt += ' (preview unavailable)'; }
+  }
+  async function openProtectedView(event, link) {
+    event.preventDefault();
+    const target = localUrl(link.href); if (!target) return;
+    const tab = window.open('about:blank', '_blank');
+    if (!tab) { message('Allow a new tab to open this view.', true); return; }
+    tab.opener = null; tab.document.body.textContent = 'Loading protected view…';
+    const signal = viewAbort.signal; pendingViews.add(tab);
+    try {
+      const response = await apiClient.request(target, { signal });
+      const type = (response.headers.get('Content-Type') || '').split(';')[0];
+      if (!response.ok || !['application/json', 'application/pdf', 'image/png'].includes(type)) throw new Error('View unavailable');
+      if (type === 'application/json') {
+        const value = await response.json(); if (signal.aborted || tab.closed) return;
+        const pre = tab.document.createElement('pre'); pre.style.whiteSpace = 'pre-wrap';
+        pre.textContent = JSON.stringify(value, null, 2); tab.document.body.replaceChildren(pre);
+      } else {
+        const blob = await response.blob();
+        if (signal.aborted || tab.closed) return;
+        if (blob.size !== Number(response.headers.get('X-Download-Size'))) throw new Error('The view did not finish loading');
+        const url = URL.createObjectURL(blob); openedUrls.push(url); tab.location.replace(url + new URL(target).hash);
+      }
+    } catch (error) { if (!signal.aborted && !tab.closed) tab.document.body.textContent = error.message; }
+    finally { pendingViews.delete(tab); }
+  }
+  function namingValues() {
+    return { title: el('name-title').value, mmsId: el('name-mms').value, oclc: el('name-oclc').value, sourceCode: el('name-source').value,
+      contributors: [...el('contributors').children].map(row => ({ role: row.querySelector('select').value, last: row.querySelector('[data-field="last"]').value, first: row.querySelector('[data-field="first"]').value })) };
+  }
+  function updateFilename() {
+    if (!reviewData) return;
+    const name = buildFilename(namingValues()); el('filename-preview').textContent = name;
+    const target = localUrl(reviewData.download_url); if (!target) { el('download').hidden = true; return; }
+    el('download').hidden = false; fitReviewLayout();
+  }
+  function releaseBrowserCopy() {
+    viewAbort.abort(); viewAbort = new AbortController();
+    for (const tab of pendingViews) if (!tab.closed) tab.close(); pendingViews.clear();
+    if (browserCopyUrl) URL.revokeObjectURL(browserCopyUrl);
+    browserCopyUrl = null; el('save-again').removeAttribute('href'); el('save-again').hidden = true;
+    releaseCropViews(); for (const url of openedUrls) URL.revokeObjectURL(url); openedUrls = [];
+  }
+  function downloadBusy(busy) {
+    refreshEditorState();
+    el('retry-delete').disabled = busy;
+  }
+  function clearDeletedReview(job) {
+    pdfPreview.destroy();
+    deletedJob = job; clearTimeout(polling); currentJob = loadedReview = reviewData = partialData = activeRow = null;
+    draftRows = []; savedBookmarkJson = '[]';
+    el('pdf-holder').replaceChildren(); el('bookmark-list').replaceChildren(); el('unmapped-list').replaceChildren(); el('unmapped-section').hidden = true; el('contributors').replaceChildren();
+    for (const id of ['book-name', 'review-summary', 'review-note', 'filename-preview']) el(id).textContent = '';
+    for (const id of ['name-title', 'name-mms', 'name-oclc', 'name-source', 'pdf', 'dropbox-url']) el(id).value = '';
+    for (const id of ['open-pdf', 'exceptions', 'partial-report']) el(id).removeAttribute('href');
+    el('review').hidden = el('partial-links').hidden = true; el('new-book').hidden = false;
+    document.body.classList.remove('reviewing'); history.replaceState(null, '', homeUrl); message('');
+  }
+  async function deleteDownloadedJob() {
+    if (!pendingDeletion || deleting) return;
+    deleting = true; downloadBusy(true); el('retry-delete').hidden = true;
+    const receipt = pendingDeletion;
+    const delivery = receipt.savedToFile ? 'The browser finished writing your chosen file.' : 'Download started from the complete browser copy.';
+    el('download-status').textContent = delivery + ' Deleting this job’s server copies…';
+    try {
+      const result = await api('/api/jobs/' + receipt.job + '/download-complete', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_generation: receipt.generation })
+      });
+      if (result.deleted !== true) throw new Error('Server deletion was not confirmed.');
+      pendingDeletion = null; clearDeletedReview(receipt.job);
+      el('download-status').textContent = delivery + ' This job’s server copies are deleted. '
+        + (receipt.savedToFile ? 'Check your saved PDF before leaving.' : 'Saving to your disk is not observable by this page. Use “Save browser copy again” if the save was cancelled or blocked.');
+    } catch (error) {
+      el('download-status').textContent = delivery + ' Server deletion was not confirmed: ' + error.message + ' Retry deletion below; do not assume the server copies are gone.';
+      el('retry-delete').hidden = false;
+    } finally { deleting = false; downloadBusy(false); }
+  }
+  async function downloadAndDelete() {
+    if (bookmarksDirty() || savingBookmarks) { message('Save or discard your bookmark edits before downloading.', true); return; }
+    if (transfer || deleting) return;
+    if (pendingDeletion) { await deleteDownloadedJob(); return; }
+    const data = reviewData || partialData, job = loadedReview || currentJob;
+    const target = localUrl(data && data.download_url);
+    if (!target || !job) { message('No available PDF to download.', true); return; }
+    const name = buildFilename(reviewData ? namingValues() : defaultNamingMetadata(data.filename || '', data.metadata || {}));
+    const expectedGeneration = data.pdf_generation ? String(data.pdf_generation) : null;
+    const url = new URL(target); url.searchParams.delete('inline'); url.searchParams.delete('download_name');
+    if (expectedGeneration) url.searchParams.set('generation', expectedGeneration);
+    transfer = new AbortController(); downloadBusy(true); el('download-actions').hidden = false;
+    el('cancel-download').hidden = false; el('retry-delete').hidden = true;
+    el('download-status').textContent = 'Receiving the complete PDF in your browser. Nothing will be deleted if this transfer fails or is cancelled.';
+    let writer;
+    try {
+      // Ask while the click still supplies a user gesture. Supported browsers
+      // stream directly to the chosen file, without retaining a book-sized Blob.
+      const file = typeof window.showSaveFilePicker === 'function'
+        ? await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'PDF document', accept: { 'application/pdf': ['.pdf'] } }] }) : null;
+      if (transfer.signal.aborted) throw new DOMException('Transfer cancelled', 'AbortError');
+      await pdfPreview.destroy();
+      const response = await apiClient.request(url.href, { signal: transfer.signal });
+      const length = response.headers.get('X-Download-Size') || response.headers.get('Content-Length');
+      const generation = (response.headers.get('ETag') || '').replace(/^"|"$/g, '');
+      if (response.status !== 200 || !/^\d+$/.test(length || '') || !/^\d+$/.test(generation)
+          || !response.headers.get('Content-Type')?.toLowerCase().startsWith('application/pdf')) throw new Error('A complete, identifiable PDF response was not received.');
+      if (expectedGeneration && generation !== expectedGeneration) throw new Error('The PDF changed. Refresh its review before downloading.');
+      const expectedSize = Number(length);
+      if (!Number.isSafeInteger(expectedSize) || expectedSize <= 0) throw new Error('The PDF size was not established.');
+      if (file) {
+        writer = await file.createWritable();
+        if (!response.body) throw new Error('The browser could not stream this PDF.');
+        const reader = response.body.getReader(); let received = 0;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            received += value.byteLength;
+            if (received > expectedSize) throw new Error('The PDF exceeded its declared size.');
+            await writer.write(value);
+            el('download-status').textContent = 'Saving PDF — ' + Math.round(received * 100 / expectedSize) + '%';
+          }
+        } finally { reader.releaseLock(); }
+        if (received !== expectedSize || transfer.signal.aborted) throw new Error('The PDF transfer did not complete; nothing will be acknowledged.');
+        await writer.close(); writer = null;
+        if (transfer.signal.aborted) throw new DOMException('Transfer cancelled', 'AbortError');
+      } else {
+        const blob = await response.blob();
+        if (transfer.signal.aborted) throw new DOMException('Transfer cancelled', 'AbortError');
+        if (blob.size !== expectedSize) throw new Error('The received PDF size did not match the complete response.');
+        releaseBrowserCopy(); browserCopyUrl = URL.createObjectURL(blob);
+        const save = el('save-again'); save.href = browserCopyUrl; save.download = name; save.hidden = false;
+        el('browser-copy-note').hidden = false; save.click();
+      }
+      pendingDeletion = { job, generation, savedToFile: !!file };
+    } catch (error) {
+      if (writer) { try { await writer.abort(); } catch {} }
+      transfer?.abort();
+      el('download-status').textContent = (error.name === 'AbortError' ? 'Transfer cancelled.' : 'Download failed: ' + error.message) + ' No deletion acknowledgement was sent; the four-hour cleanup backstop still applies.';
+    } finally { transfer = null; el('cancel-download').hidden = true; downloadBusy(false); }
+    if (pendingDeletion) await deleteDownloadedJob();
+  }
+  function addContributor(value = {}) {
+    const row = document.createElement('div'); row.className = 'contributor-row';
+    const roleLabel = document.createElement('label'); roleLabel.textContent = 'Role'; const role = document.createElement('select');
+    for (const [key, text] of [['author', 'Author'], ['editor', 'Editor'], ['compiler', 'Compiler']]) { const option = document.createElement('option'); option.value = key; option.textContent = text; role.append(option); }
+    role.value = value.role || 'author'; roleLabel.append(role); row.append(roleLabel);
+    for (const [key, text] of [['last', 'Last name'], ['first', 'First name']]) { const label = document.createElement('label'); label.textContent = text; const input = document.createElement('input'); input.type = 'text'; input.dataset.field = key; input.autocomplete = 'off'; input.value = value[key] || ''; label.append(input); row.append(label); }
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'quiet'; remove.textContent = 'Remove';
+    remove.addEventListener('click', () => { row.remove(); el('no-contributors').hidden = el('contributors').children.length > 0; updateFilename(); }); row.append(remove);
+    el('contributors').append(row); el('no-contributors').hidden = true;
+  }
+  function initializeNaming(data, status) {
+    const values = defaultNamingMetadata(data.filename || status.filename || '', data.metadata || {});
+    el('naming-note').textContent = (values.namingSource === 'source_filename'
+      ? 'Title-page metadata was unavailable. This name comes from the source filename; check it before downloading. '
+      : 'Uses the live service’s filename rules. ') + 'These edits change the download name only, not the PDF or its bookmarks.';
+    el('name-title').value = values.title || ''; el('name-mms').value = values.mmsId || ''; el('name-oclc').value = values.oclc || ''; el('name-source').value = values.sourceCode || '';
+    el('contributors').replaceChildren(); for (const contributor of values.contributors || []) addContributor(contributor);
+    el('no-contributors').hidden = el('contributors').children.length > 0;
+    reviewData.download_url = data.download_url || status.download_url; updateFilename();
+  }
+  async function api(path, options = {}) {
+    const response = await apiClient.request(path, options);
+    let body; try { body = await response.json(); } catch { body = {}; }
+    if (!response.ok) {
+      if (response.status === 403) { el('welcome').hidden = false; el('login').hidden = false; el('upload').hidden = el('import').hidden = el('file-upload-option').hidden = true; el('workspace').hidden = true; el('account-actions').hidden = true; }
+      throw Object.assign(new Error(typeof body.detail === 'string' ? body.detail : 'Request failed (' + response.status + ').'), { status: response.status });
+    }
+    return body;
+  }
+  function showPage(page, rowId = null) {
+    if (!reviewData || !Number.isInteger(page) || page < 1 || page > reviewData.page_count) return;
+    currentPage = page; activeRow = rowId; el('page-number').value = page;
+    el('previous-page').disabled = page === 1; el('next-page').disabled = page === reviewData.page_count;
+    const url = localUrl(reviewData.pdf_url);
+    pdfPreview.show(url, page); el('open-pdf').href = url + '#page=' + page;
+    for (const item of el('bookmark-list').children) item.querySelector('.bookmark').setAttribute('aria-current', String(item.dataset.rowId === rowId));
+    refreshUnmappedActions();
+  }
+  function focusBookmark(id) {
+    [...el('bookmark-list').children].find(item => item.dataset.rowId === id)?.querySelector('.bookmark-title-input')?.focus();
+  }
+  function changedOutline(rows, focusId) {
+    draftRows = rows; renderBookmarks(); if (focusId) focusBookmark(focusId);
+  }
+  function addManualBookmark(title = '', unresolved = false) {
+    if (editorBusy() || !reviewData || !Number.isInteger(currentPage) || currentPage < 1 || currentPage > reviewData.page_count) return;
+    const id = 'manual-' + crypto.randomUUID(); el('flags-only').checked = false;
+    changedOutline([...draftRows, { id, title, pdf_page: currentPage, level: 1, flagged: false,
+      manual_note: unresolved ? 'Added from an unresolved entry at your chosen PDF page; not automatically checked.' : 'New bookmark; not automatically checked.' }], id);
+  }
+  function refreshUnmappedActions() {
+    for (const button of el('unmapped-list').querySelectorAll('button')) {
+      button.textContent = 'Add at PDF page ' + currentPage;
+      button.disabled = editorBusy() || !reviewData || !Number.isInteger(currentPage) || currentPage < 1 || currentPage > reviewData.page_count;
+    }
+  }
+  function renderUnmapped() {
+    releaseCropViews();
+    const list = el('unmapped-list'); list.replaceChildren();
+    const rows = Array.isArray(reviewData?.unmapped_rows) ? reviewData.unmapped_rows : [];
+    el('unmapped-section').hidden = rows.length === 0;
+    for (const row of rows) {
+      const item = document.createElement('li'), title = document.createElement('strong'), reason = document.createElement('p');
+      title.textContent = row.display_title || row.title || 'Unreadable Contents entry'; item.append(title);
+      reason.className = 'small'; reason.textContent = 'Printed folio: ' + (row.printed_page ?? 'NOT OBSERVED') + '. '
+        + (row.flag_reason || row.exception || 'Destination NOT OBSERVED.'); item.append(reason);
+      for (const crop of row.crops || []) {
+        if (typeof crop !== 'string' || !/^crops\/[A-Za-z0-9_-]+\.png$/.test(crop)) continue;
+        const url = localUrl('/api/jobs/' + loadedReview + '/artifacts/' + crop);
+        if (!url) continue;
+        const link = document.createElement('a'), image = document.createElement('img');
+        link.href = url; link.target = '_blank'; link.rel = 'noopener'; image.loading = 'lazy';
+        if (apiClient.crossOrigin) loadProtectedImage(image, url); else image.src = url;
+        image.alt = 'Contents crop for ' + title.textContent; link.append(image); item.append(link);
+      }
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary';
+      button.addEventListener('click', () => addManualBookmark(row.display_title || row.title || '', true));
+      item.append(button); list.append(item);
+    }
+    refreshUnmappedActions();
+  }
+  function renderBookmarks() {
+    const list = el('bookmark-list'); list.replaceChildren();
+    const rows = draftRows.filter(row => !el('flags-only').checked || row.flagged === true);
+    for (const row of rows) {
+      const item = document.createElement('li'), card = document.createElement('div');
+      item.dataset.rowId = row.id; card.className = 'bookmark'; card.setAttribute('aria-current', String(row.id === activeRow));
+      card.addEventListener('click', event => { if (!event.target.closest('input,textarea,button,.drag-handle')) showPage(row.pdf_page, row.id); });
+      card.style.setProperty('--indent', Math.min(3, Math.max(0, row.level - 1)) * 12 + 'px');
+      const title = document.createElement('textarea'); title.rows = 1; title.className = 'bookmark-title-input';
+      title.value = row.title || ''; title.required = true; title.dataset.editorControl = ''; title.setAttribute('aria-label', 'Bookmark title');
+      title.addEventListener('input', () => { row.title = title.value; fitBookmarkTitles(); refreshEditorState(); }); card.append(title);
+      const controls = document.createElement('div'); controls.className = 'bookmark-controls';
+      const handle = document.createElement('span'); handle.className = 'drag-handle'; handle.textContent = '⠿'; handle.title = 'Drag this bookmark and its children'; controls.append(handle);
+      const page = document.createElement('input'); page.type = 'number'; page.min = '1'; page.max = reviewData.page_count;
+      page.step = '1'; page.required = true; page.value = row.pdf_page ?? ''; page.dataset.editorControl = ''; page.setAttribute('aria-label', 'PDF destination page for ' + (row.title || 'bookmark'));
+      page.addEventListener('input', () => { row.pdf_page = page.value === '' ? null : Number(page.value); refreshEditorState(); }); controls.append(page);
+      const action = (text, label, run, unavailable = false, edit = true) => {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary'; button.textContent = text; button.setAttribute('aria-label', label);
+        if (edit) { button.dataset.editorControl = ''; button.dataset.unavailable = String(unavailable); }
+        button.addEventListener('click', run); controls.append(button); return button;
+      };
+      action('View', 'Preview this bookmark destination', () => showPage(row.pdf_page, row.id), false, false);
+      for (const [direction, text] of [[-1, '↑'], [1, '↓']]) {
+        const target = siblingTarget(draftRows, row.id, direction);
+        action(text, 'Move bookmark ' + (direction < 0 ? 'up' : 'down') + ' with its children', () => changedOutline(moveBookmark(draftRows, row.id, target, direction > 0), row.id), !target);
+      }
+      action('Delete', 'Delete bookmark but keep its children', () => changedOutline(deleteBookmark(draftRows, row.id)));
+      card.append(controls);
+      if (row.flagged === true) {
+        const flag = document.createElement('span'); flag.className = 'flag-label'; flag.textContent = '⚑ Needs review'; card.append(flag);
+        const reason = document.createElement('span'); reason.className = 'flag-reason'; reason.textContent = row.flag_reason || 'Review this bookmark against the page.'; card.append(reason);
+      }
+      if (row.manual_note) { const note = document.createElement('p'); note.className = 'small muted'; note.textContent = row.manual_note; card.append(note); }
+      item.addEventListener('dragstart', event => {
+        if (editorBusy() || event.target.closest('input,textarea,button')) { event.preventDefault(); return; }
+        draggedRow = row.id; event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', row.id);
+      });
+      item.addEventListener('dragover', event => {
+        if (!draggedRow || editorBusy()) return;
+        event.preventDefault(); const after = event.clientY > item.getBoundingClientRect().top + item.offsetHeight / 2;
+        item.classList.toggle('drop-before', !after); item.classList.toggle('drop-after', after);
+      });
+      item.addEventListener('dragleave', () => item.classList.remove('drop-before', 'drop-after'));
+      item.addEventListener('drop', event => {
+        if (!draggedRow || editorBusy()) return;
+        event.preventDefault(); const id = draggedRow; draggedRow = null;
+        const after = event.clientY > item.getBoundingClientRect().top + item.offsetHeight / 2;
+        changedOutline(moveBookmark(draftRows, id, row.id, after), id);
+      });
+      item.addEventListener('dragend', () => { draggedRow = null; for (const entry of list.children) entry.classList.remove('drop-before', 'drop-after'); });
+      item.append(card); list.append(item);
+    }
+    el('empty-list').hidden = rows.length !== 0; el('empty-list').textContent = el('flags-only').checked ? 'No bookmarks need review.' : 'No bookmarks. Add one, or save the empty outline.';
+    renderUnmapped(); fitBookmarkTitles(); refreshEditorState();
+  }
+  function displayReview(data, status = {}, preserveNaming = false) {
+    if (!Array.isArray(data.rows) || !Number.isInteger(data.page_count) || data.page_count < 1 || !localUrl(data.pdf_url)) throw new Error('The PDF is available, but its review data could not be loaded. Use the download link below.');
+    reviewData = data; draftRows = data.rows.map(row => ({ ...row })); savedBookmarkJson = JSON.stringify(bookmarkFields(draftRows));
+    const flagged = data.rows.filter(row => row.flagged === true).length;
+    el('book-name').textContent = data.filename || status.filename || 'Your bookmarked PDF';
+    const unmapped = Array.isArray(data.unmapped_rows) ? data.unmapped_rows.length : 0;
+    el('review-summary').textContent = data.rows.length + ' bookmarks · ' + (flagged === 0 ? 'No active review flags' : flagged + ' need review')
+      + (unmapped ? ' · ' + unmapped + ' need a destination' : '') + ' · ' + data.page_count + ' pages';
+    el('review-note').textContent = typeof data.review_note === 'string' ? data.review_note : 'Click a bookmark to inspect its destination, then download your PDF.';
+    el('page-total').textContent = 'of ' + data.page_count; el('page-number').max = data.page_count;
+    el('flags-only').checked = false; el('flags-only').disabled = flagged === 0;
+    el('download').hidden = !localUrl(data.download_url || status.download_url); link('exceptions', data.exceptions_url);
+    if (preserveNaming) updateFilename(); else initializeNaming(data, status);
+    el('welcome').hidden = true; el('review').hidden = false; el('partial-links').hidden = true; el('new-book').hidden = false;
+    document.body.classList.add('reviewing'); message(''); renderBookmarks(); showPage(preserveNaming ? Math.min(currentPage, data.page_count) : 1);
+  }
+  async function loadReview(job, status) {
+    const data = await api('/api/jobs/' + job + '/review');
+    if (job === deletedJob || bookmarksDirty() || savingBookmarks) return;
+    loadedReview = job; displayReview(data, status);
+  }
+  async function saveBookmarks() {
+    if (!bookmarksDirty() || editorBusy() || !loadedReview) return;
+    for (const input of el('bookmark-list').querySelectorAll('input,textarea')) if (!input.reportValidity()) return;
+    const bookmarks = bookmarkFields(draftRows);
+    if (bookmarks.some(row => typeof row.title !== 'string' || !row.title.trim() || !Number.isInteger(row.pdf_page) || row.pdf_page < 1 || row.pdf_page > reviewData.page_count)) {
+      message('Every bookmark needs a title and a valid PDF page, including hidden rows.', true); return;
+    }
+    if (!/^\d+$/.test(String(reviewData.pdf_generation || ''))) { message('The PDF generation is unavailable. Refresh before editing.', true); return; }
+    savingBookmarks = true; refreshEditorState();
+    try {
+      await pdfPreview.destroy();
+      const data = await api('/api/jobs/' + loadedReview + '/bookmarks', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_generation: String(reviewData.pdf_generation), bookmarks }) });
+      displayReview(data, {}, true); message('Bookmark edits saved. Existing reading and review notes are retained.');
+    } catch (error) {
+      message(error.status === 409 ? 'The PDF changed in another request. Your draft is still here. Refresh is needed before saving; copy any edits you want to keep first.' : 'Edits were not confirmed saved. Your draft is still here. ' + error.message, true);
+    } finally { savingBookmarks = false; refreshEditorState(); }
+  }
+  async function poll(job) {
+    if (job === deletedJob) return;
+    clearTimeout(polling);
+    try {
+      const data = await api('/api/jobs/' + job), inProgress = ['ready', 'queued', 'running', 'uploading'].includes(data.state);
+      if (job === deletedJob || (currentJob && currentJob !== job)) return;
+      currentJob = job; partialData = data;
+      if (data.state !== 'ready' && startingJob === job) startingJob = null;
+      el('start-job').hidden = data.state !== 'ready';
+      el('start-job').disabled = startingJob === job;
+      el('workspace').hidden = false; el('partial-links').hidden = !data.report_url && !data.download_url;
+      link('partial-report', data.report_url); el('partial-download').hidden = !localUrl(data.download_url);
+      if (data.download_url && !inProgress) { if (loadedReview !== job) await loadReview(job, data); else el('partial-links').hidden = true; }
+      else message((data.filename ? 'Book: ' + data.filename + '\n' : '') + (data.message || data.state), ['failed', 'interrupted'].includes(data.state));
+      if (inProgress) polling = setTimeout(() => poll(job), 5000); else inputBusy(false);
+      if (data.state === 'ready') inputBusy(false);
+      return data;
+    } catch (error) { message(error.message, true); inputBusy(false); }
+  }
+  async function startAndWatch(job) {
+    if (startingJob === job) return;
+    startingJob = job; el('start-job').disabled = true;
+    history.replaceState(null, '', reviewUrl(job)); currentJob = job; inputBusy(true);
+    const processing = api('/api/jobs/' + job + '/start', { method: 'POST' });
+    processing.then(() => {
+      if (currentJob !== job) return;
+      startingJob = null; return poll(job);
+    }, async error => {
+      if (currentJob !== job) return;
+      startingJob = null;
+      const data = await poll(job);
+      if (currentJob === job && (!data || data.state === 'ready' || data.state === 'uploading')) {
+        message(error.message + ' Processing is not confirmed. Keep this job link and check its status before starting again.', true);
+        inputBusy(false);
+      }
+    });
+    await poll(job);
+  }
+  async function ready() {
+    el('login').hidden = true; el('upload').hidden = el('import').hidden = el('file-upload-option').hidden = false; el('workspace').hidden = false; el('account-actions').hidden = false; message('');
+    const job = new URLSearchParams(location.search).get('job'); if (job && /^[0-9a-f]{32}$/.test(job)) { message('Loading your book…'); await poll(job); }
+  }
+  el('login').addEventListener('submit', async event => {
+    event.preventDefault();
+    try { await apiClient.login(el('password').value); el('password').value = ''; await ready(); }
+    catch (error) { message(error.message, true); }
+  });
+  function confirmLeave() {
+    if (savingBookmarks) { message('Wait until saving finishes before leaving.', true); return false; }
+    return !bookmarksDirty() || window.confirm('Leave without saving your bookmark edits?');
+  }
+  el('logout').addEventListener('click', async () => {
+    if (!confirmLeave()) return;
+    apiClient.clear(); transfer?.abort(); releaseBrowserCopy(); clearTimeout(polling);
+    try { await pdfPreview.destroy(); await api('/api/logout', { method: 'POST' }); leavingConfirmed = true; location.assign(homeUrl); }
+    catch (error) { message(error.message, true); }
+  });
+  el('new-book').addEventListener('click', () => { if (!confirmLeave()) return; transfer?.abort(); releaseBrowserCopy(); clearTimeout(polling); leavingConfirmed = true; location.assign(homeUrl); });
+  document.addEventListener('click', event => {
+    const anchor = event.target.closest('a');
+    if (apiClient.crossOrigin && anchor && localUrl(anchor.href)
+        && new URL(anchor.href).pathname.startsWith('/api/')) openProtectedView(event, anchor);
+  });
+  window.addEventListener('beforeunload', event => { if (!leavingConfirmed && (bookmarksDirty() || savingBookmarks)) { event.preventDefault(); event.returnValue = ''; } });
+  window.addEventListener('pagehide', () => { transfer?.abort(); pdfPreview.destroy(); releaseBrowserCopy(); });
+  window.addEventListener('resize', fitReviewLayout);
+  document.querySelector('.naming').addEventListener('toggle', fitReviewLayout);
+  el('download').addEventListener('click', downloadAndDelete);
+  el('partial-download').addEventListener('click', downloadAndDelete);
+  el('cancel-download').addEventListener('click', () => transfer?.abort());
+  el('retry-delete').addEventListener('click', deleteDownloadedJob);
+  el('start-job').addEventListener('click', () => startAndWatch(currentJob));
+  el('import').addEventListener('submit', async event => {
+    event.preventDefault(); clearTimeout(polling); releaseBrowserCopy(); inputBusy(true);
+    el('progress').hidden = el('partial-links').hidden = true;
+    message('Importing your PDF from Dropbox and processing it in Google Cloud… Keep this page open.');
+    try {
+      const data = await api('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: el('dropbox-url').value.trim() }) });
+      if (!/^[0-9a-f]{32}$/.test(data.id || '')) throw new Error('No job ID was returned; completion is NOT OBSERVED.');
+      await startAndWatch(data.id);
+    } catch (error) { message(error.message, true); inputBusy(false); }
+  });
+  el('naming-form').addEventListener('submit', event => event.preventDefault());
+  el('naming-form').addEventListener('input', updateFilename); el('naming-form').addEventListener('change', updateFilename);
+  el('add-contributor').addEventListener('click', () => { addContributor(); updateFilename(); });
+  el('flags-only').addEventListener('change', renderBookmarks);
+  el('add-bookmark').addEventListener('click', () => addManualBookmark());
+  el('save-bookmarks').addEventListener('click', saveBookmarks);
+  el('discard-bookmarks').addEventListener('click', () => {
+    if (editorBusy()) return;
+    changedOutline(reviewData.rows.map(row => ({ ...row }))); message('Unsaved bookmark edits discarded.');
+  });
+  el('previous-page').addEventListener('click', () => showPage(currentPage - 1));
+  el('next-page').addEventListener('click', () => showPage(currentPage + 1));
+  el('page-navigation').addEventListener('submit', event => { event.preventDefault(); const page = Number(el('page-number').value); if (Number.isInteger(page) && page >= 1 && page <= reviewData.page_count) showPage(page); else el('page-number').value = currentPage; });
+  el('upload').addEventListener('submit', async event => {
+    event.preventDefault(); clearTimeout(polling); releaseBrowserCopy();
+    const file = el('pdf').files[0];
+    if (!file || file.size > 512 * 1024 * 1024) { message('Choose a PDF no larger than 512 MiB.', true); return; }
+    inputBusy(true); el('progress').hidden = false; el('partial-links').hidden = true;
+    try {
+      const job = await api('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name, size: file.size }) });
+      const chunkSize = job.chunk_size;
+      for (let start = 0, index = 0; start < file.size; start += chunkSize, index++) {
+        await api('/api/jobs/' + job.id + '/chunks/' + index, { method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: file.slice(start, start + chunkSize) });
+        el('progress').value = Math.min(100, (start + chunkSize) * 100 / file.size); message('Uploading ' + file.name + ' — ' + Math.round(el('progress').value) + '%');
+      }
+      el('progress').hidden = true; await startAndWatch(job.id);
+    } catch (error) { message(error.message, true); inputBusy(false); }
+  });
+  api('/api/session').then(ready).catch(error => { el('login').hidden = false; message(error.message === 'Forbidden' ? 'Enter the service password to continue.' : error.message); });
+</script>
+</body>
+</html>
