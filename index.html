@@ -40,8 +40,8 @@
     .review-heading h1 { font-size: clamp(23px, 3vw, 30px); }
     #book-name { margin: 3px 0 0; font-size: 14px; overflow-wrap: anywhere; }
     #review-summary { margin: 8px 0 0; font-size: 14px; }
-    .review-layout { display: grid; grid-template-columns: minmax(270px, 340px) minmax(0, 1fr); height: 60dvh; min-height: 240px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: white; }
-    .bookmark-pane { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+    .review-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(270px, 340px); height: 60dvh; min-height: 240px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: white; }
+    .bookmark-pane { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); }
     .list-tools { padding: 17px 17px 13px; border-bottom: 1px solid var(--line); justify-content: space-between; }
     .filter { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; margin: 0; color: #536055; }
     .filter input { width: 15px; height: 15px; margin: 0; accent-color: var(--green); }
@@ -73,7 +73,7 @@
     .flag-reason { display: block; font-size: 12px; color: #805c2c; line-height: 1.4; margin-top: 4px; }
     .empty { padding: 12px; color: #69776d; font-size: 14px; }
     .list-footnote { padding: 10px 16px; margin: 0; border-top: 1px solid var(--line); font-size: 11px; color: #738074; }
-    .preview-pane { display: flex; flex-direction: column; min-height: 0; background: #d9ddda; }
+    .preview-pane { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; min-height: 0; background: #d9ddda; }
     .page-controls { flex-shrink: 0; padding: 10px 13px; background: #f8faf6; border-bottom: 1px solid var(--line); justify-content: center; font-size: 13px; }
     .page-controls button { padding: 6px 10px; }
     .page-controls label { display: inline; margin: 0; font-size: 13px; font-weight: 500; }
@@ -102,7 +102,7 @@
       body { padding: 16px 12px; }
       .card { padding: 23px; }
       .topbar { margin-bottom: 20px; }
-      .review-layout { grid-template-columns: minmax(170px, 36%) minmax(0, 1fr); }
+      .review-layout { grid-template-columns: minmax(0, 1fr) minmax(170px, 36%); }
       .list-tools { padding: 12px; }
       .bookmark { font-size: 12px; padding: 10px 7px 10px calc(7px + var(--indent, 0px)); }
       .bookmark-line { display: block; }
@@ -112,13 +112,14 @@
       .naming-fields { grid-template-columns: 1fr; }
       .contributor-row { grid-template-columns: 95px minmax(0, 1fr); }
     }
+    body.source-preview .review-layout { grid-template-columns: minmax(0, 1fr); }
   </style>
 </head>
 <body>
 <main>
   <header class="topbar">
     <div class="brand">DTL · PDF Bookmark Creator <span class="badge">Experimental</span></div>
-    <div id="account-actions" class="actions" hidden><button id="new-book" class="quiet" hidden>Upload another PDF</button><button id="logout" class="quiet">Sign out</button></div>
+    <div id="account-actions" class="actions" hidden><button id="new-book" class="quiet" hidden>New book</button><button id="logout" class="quiet">Sign out</button></div>
   </header>
   <section id="welcome" class="card">
     <h1>A scanned PDF, with bookmarks.</h1>
@@ -144,10 +145,10 @@
   <section id="workspace" hidden>
     <div id="review" hidden>
       <header class="review-heading">
-        <div><h1>Review your bookmarks</h1><p id="book-name"></p><p id="review-summary"></p></div><button id="download" type="button" hidden>Download & delete server copies</button>
+        <div><h1 id="review-title">Review your bookmarks</h1><p id="book-name"></p><p id="review-summary"></p></div><button id="download" type="button" hidden>Download & delete server copies</button>
       </header>
-      <p class="small muted">After the whole PDF reaches your browser, downloading permanently deletes the uploaded PDF, results, crops and extracted text from this job on the server. Previewing does not delete anything. The browser cannot confirm that you saved the file to disk.</p>
-      <details class="naming">
+      <p id="download-note" class="small muted">After the whole PDF reaches your browser, downloading permanently deletes the uploaded PDF, results, crops and extracted text from this job on the server. Previewing does not delete anything. The browser cannot confirm that you saved the file to disk.</p>
+      <details id="naming-panel" class="naming">
         <summary>Download name & metadata<span id="filename-preview" aria-live="polite"></span></summary>
         <form id="naming-form" class="naming-fields">
           <label class="wide" for="name-title">Title<input id="name-title" type="text" autocomplete="off"></label>
@@ -162,7 +163,7 @@
         </form>
       </details>
       <div class="review-layout">
-        <aside class="bookmark-pane" aria-label="PDF bookmarks">
+        <aside id="bookmark-panel" class="bookmark-pane" aria-label="PDF bookmarks">
           <div class="list-tools"><h2>Bookmarks</h2><label class="filter"><input id="flags-only" type="checkbox"> Flagged only</label></div>
           <div class="editor-actions"><div class="actions"><button id="add-bookmark" type="button" class="secondary">Add bookmark</button><button id="save-bookmarks" type="button" disabled>Save all</button><button id="discard-bookmarks" type="button" class="quiet" disabled>Discard</button></div><p id="edit-status" role="status" aria-live="polite">No unsaved edits.</p></div>
           <nav class="bookmark-scroll" aria-label="Jump to a bookmark"><ol id="bookmark-list"></ol><p id="empty-list" class="empty" hidden></p>
@@ -199,8 +200,8 @@
     () => import(apiClient.assetUrl('/assets/pdfjs/build/pdf.mjs')), apiClient);
   const homeUrl = new URL('./', location.href);
   const reviewUrl = job => { const url = new URL(homeUrl); url.searchParams.set('job', job); return url.href; };
-  let cropAbort = new AbortController(), viewAbort = new AbortController(), cropUrls = [], openedUrls = [], pendingViews = new Set();
-  let polling, loadedReview, reviewData, currentPage = 1, activeRow, currentJob, partialData, startingJob;
+  let cropAbort = new AbortController(), viewAbort = new AbortController(), jobAbort = new AbortController(), cropUrls = [], openedUrls = [], pendingViews = new Set();
+  let polling, loadedReview, reviewData, sourcePreview, currentPage = 1, activeRow, currentJob, partialData, startingJob;
   let transfer, browserCopyUrl, pendingDeletion, deletedJob, deleting = false;
   let draftRows = [], savedBookmarkJson = '[]', savingBookmarks = false, draggedRow, leavingConfirmed = false;
   function bookmarkFields(rows) {
@@ -326,16 +327,28 @@
     refreshEditorState();
     el('retry-delete').disabled = busy;
   }
-  function clearDeletedReview(job) {
+  function resetReview() {
+    jobAbort.abort(); jobAbort = new AbortController();
     pdfPreview.destroy();
-    deletedJob = job; clearTimeout(polling); currentJob = loadedReview = reviewData = partialData = activeRow = null;
-    draftRows = []; savedBookmarkJson = '[]';
+    clearTimeout(polling); currentJob = loadedReview = reviewData = sourcePreview = partialData = activeRow = startingJob = null;
+    draftRows = []; savedBookmarkJson = '[]'; currentPage = 1; draggedRow = null;
     el('pdf-holder').replaceChildren(); el('bookmark-list').replaceChildren(); el('unmapped-list').replaceChildren(); el('unmapped-section').hidden = true; el('contributors').replaceChildren();
     for (const id of ['book-name', 'review-summary', 'review-note', 'filename-preview']) el(id).textContent = '';
     for (const id of ['name-title', 'name-mms', 'name-oclc', 'name-source', 'pdf', 'dropbox-url']) el(id).value = '';
     for (const id of ['open-pdf', 'exceptions', 'partial-report']) el(id).removeAttribute('href');
     el('review').hidden = el('partial-links').hidden = true; el('new-book').hidden = false;
-    document.body.classList.remove('reviewing'); history.replaceState(null, '', homeUrl); message('');
+    document.body.classList.remove('reviewing', 'source-preview'); history.replaceState(null, '', homeUrl); message('');
+  }
+  function clearDeletedReview(job) { deletedJob = job; resetReview(); }
+  function newBook() {
+    if (['ready', 'queued', 'running', 'uploading'].includes(partialData?.state)) { message('Wait for this book to finish processing before starting another book.', true); return; }
+    if (editorBusy()) { message('Finish saving, downloading or confirming server deletion before starting another book.', true); return; }
+    if (!confirmLeave()) return;
+    releaseBrowserCopy(); resetReview(); deletedJob = null; leavingConfirmed = false;
+    el('welcome').hidden = el('import').hidden = el('upload').hidden = el('file-upload-option').hidden = el('account-actions').hidden = false;
+    el('login').hidden = el('workspace').hidden = el('new-book').hidden = el('download-actions').hidden = el('progress').hidden = el('start-job').hidden = true;
+    el('file-upload-option').open = false; el('progress').value = 0;
+    inputBusy(false); el('dropbox-url').focus();
   }
   async function deleteDownloadedJob() {
     if (!pendingDeletion || deleting) return;
@@ -443,6 +456,7 @@
   async function api(path, options = {}) {
     const response = await apiClient.request(path, options);
     let body; try { body = await response.json(); } catch { body = {}; }
+    if (options.signal?.aborted) throw new DOMException('Previous book closed', 'AbortError');
     if (!response.ok) {
       if (response.status === 403) { el('welcome').hidden = false; el('login').hidden = false; el('upload').hidden = el('import').hidden = el('file-upload-option').hidden = true; el('workspace').hidden = true; el('account-actions').hidden = true; }
       throw Object.assign(new Error(typeof body.detail === 'string' ? body.detail : 'Request failed (' + response.status + ').'), { status: response.status });
@@ -450,10 +464,11 @@
     return body;
   }
   function showPage(page, rowId = null) {
-    if (!reviewData || !Number.isInteger(page) || page < 1 || page > reviewData.page_count) return;
+    const preview = reviewData || sourcePreview;
+    if (!preview || !Number.isInteger(page) || page < 1 || page > preview.page_count) return;
     currentPage = page; activeRow = rowId; el('page-number').value = page;
-    el('previous-page').disabled = page === 1; el('next-page').disabled = page === reviewData.page_count;
-    const url = localUrl(reviewData.pdf_url);
+    el('previous-page').disabled = page === 1; el('next-page').disabled = page === preview.page_count;
+    const url = localUrl(preview.pdf_url);
     pdfPreview.show(url, page); el('open-pdf').href = url + '#page=' + page;
     for (const item of el('bookmark-list').children) item.querySelector('.bookmark').setAttribute('aria-current', String(item.dataset.rowId === rowId));
     refreshUnmappedActions();
@@ -556,8 +571,27 @@
     el('empty-list').hidden = rows.length !== 0; el('empty-list').textContent = el('flags-only').checked ? 'No bookmarks need review.' : 'No bookmarks. Add one, or save the empty outline.';
     renderUnmapped(); fitBookmarkTitles(); refreshEditorState();
   }
+  function displaySourcePreview(data) {
+    const source = data.source_preview;
+    if (reviewData || !source || !Number.isInteger(source.page_count) || source.page_count < 1 || !localUrl(source.pdf_url)) return;
+    const changed = sourcePreview?.pdf_url !== source.pdf_url;
+    sourcePreview = source;
+    document.body.classList.add('reviewing', 'source-preview');
+    el('welcome').hidden = true; el('review').hidden = false; el('new-book').hidden = false;
+    for (const id of ['bookmark-panel', 'naming-panel', 'download-note', 'download', 'open-pdf', 'exceptions', 'partial-links', 'download-actions']) el(id).hidden = true;
+    el('review-title').textContent = 'Original PDF'; el('book-name').textContent = data.filename || 'Your scanned PDF';
+    el('review-summary').textContent = source.page_count + ' pages · Original, not the bookmarked result';
+    el('review-note').textContent = 'You can browse while processing continues. Bookmark editing and downloading appear when results are ready.';
+    el('page-total').textContent = 'of ' + source.page_count; el('page-number').max = source.page_count;
+    if (changed) showPage(Math.min(currentPage, source.page_count));
+    fitReviewLayout();
+  }
   function displayReview(data, status = {}, preserveNaming = false) {
     if (!Array.isArray(data.rows) || !Number.isInteger(data.page_count) || data.page_count < 1 || !localUrl(data.pdf_url)) throw new Error('The PDF is available, but its review data could not be loaded. Use the download link below.');
+    const page = preserveNaming || sourcePreview ? Math.min(currentPage, data.page_count) : 1;
+    sourcePreview = null; document.body.classList.remove('source-preview');
+    for (const id of ['bookmark-panel', 'naming-panel', 'download-note', 'open-pdf']) el(id).hidden = false;
+    el('review-title').textContent = 'Review your bookmarks';
     reviewData = data; draftRows = data.rows.map(row => ({ ...row })); savedBookmarkJson = JSON.stringify(bookmarkFields(draftRows));
     const flagged = data.rows.filter(row => row.flagged === true).length;
     el('book-name').textContent = data.filename || status.filename || 'Your bookmarked PDF';
@@ -570,11 +604,12 @@
     el('download').hidden = !localUrl(data.download_url || status.download_url); link('exceptions', data.exceptions_url);
     if (preserveNaming) updateFilename(); else initializeNaming(data, status);
     el('welcome').hidden = true; el('review').hidden = false; el('partial-links').hidden = true; el('new-book').hidden = false;
-    document.body.classList.add('reviewing'); message(''); renderBookmarks(); showPage(preserveNaming ? Math.min(currentPage, data.page_count) : 1);
+    document.body.classList.add('reviewing'); message(''); renderBookmarks(); showPage(page);
   }
   async function loadReview(job, status) {
-    const data = await api('/api/jobs/' + job + '/review');
-    if (job === deletedJob || bookmarksDirty() || savingBookmarks) return;
+    const signal = jobAbort.signal;
+    const data = await api('/api/jobs/' + job + '/review', { signal });
+    if (signal.aborted || currentJob !== job || job === deletedJob || bookmarksDirty() || savingBookmarks) return;
     loadedReview = job; displayReview(data, status);
   }
   async function saveBookmarks() {
@@ -596,23 +631,25 @@
     } finally { savingBookmarks = false; refreshEditorState(); }
   }
   async function poll(job) {
-    if (job === deletedJob) return;
+    if (job !== currentJob || job === deletedJob) return;
+    const signal = jobAbort.signal;
     clearTimeout(polling);
     try {
-      const data = await api('/api/jobs/' + job), inProgress = ['ready', 'queued', 'running', 'uploading'].includes(data.state);
-      if (job === deletedJob || (currentJob && currentJob !== job)) return;
+      const data = await api('/api/jobs/' + job, { signal }), inProgress = ['ready', 'queued', 'running', 'uploading'].includes(data.state);
+      if (signal.aborted || job !== currentJob || job === deletedJob) return;
       currentJob = job; partialData = data;
       if (data.state !== 'ready' && startingJob === job) startingJob = null;
       el('start-job').hidden = data.state !== 'ready';
       el('start-job').disabled = startingJob === job;
-      el('workspace').hidden = false; el('partial-links').hidden = !data.report_url && !data.download_url;
-      link('partial-report', data.report_url); el('partial-download').hidden = !localUrl(data.download_url);
+      el('workspace').hidden = false; el('partial-links').hidden = inProgress || (!data.report_url && !data.download_url);
+      link('partial-report', data.report_url); el('partial-download').hidden = inProgress || !localUrl(data.download_url);
       if (data.download_url && !inProgress) { if (loadedReview !== job) await loadReview(job, data); else el('partial-links').hidden = true; }
-      else message((data.filename ? 'Book: ' + data.filename + '\n' : '') + (data.message || data.state), ['failed', 'interrupted'].includes(data.state));
+      else { displaySourcePreview(data); message((data.filename ? 'Book: ' + data.filename + '\n' : '') + (data.message || data.state), ['failed', 'interrupted'].includes(data.state)); }
+      if (signal.aborted || job !== currentJob) return;
       if (inProgress) polling = setTimeout(() => poll(job), 5000); else inputBusy(false);
       if (data.state === 'ready') inputBusy(false);
       return data;
-    } catch (error) { message(error.message, true); inputBusy(false); }
+    } catch (error) { if (!signal.aborted && job === currentJob) { message(error.message, true); inputBusy(false); } }
   }
   async function startAndWatch(job) {
     if (startingJob === job) return;
@@ -635,7 +672,7 @@
   }
   async function ready() {
     el('login').hidden = true; el('upload').hidden = el('import').hidden = el('file-upload-option').hidden = false; el('workspace').hidden = false; el('account-actions').hidden = false; message('');
-    const job = new URLSearchParams(location.search).get('job'); if (job && /^[0-9a-f]{32}$/.test(job)) { message('Loading your book…'); await poll(job); }
+    const job = new URLSearchParams(location.search).get('job'); if (job && /^[0-9a-f]{32}$/.test(job)) { currentJob = job; message('Loading your book…'); await poll(job); }
   }
   el('login').addEventListener('submit', async event => {
     event.preventDefault();
@@ -652,7 +689,7 @@
     try { await pdfPreview.destroy(); await api('/api/logout', { method: 'POST' }); leavingConfirmed = true; location.assign(homeUrl); }
     catch (error) { message(error.message, true); }
   });
-  el('new-book').addEventListener('click', () => { if (!confirmLeave()) return; transfer?.abort(); releaseBrowserCopy(); clearTimeout(polling); leavingConfirmed = true; location.assign(homeUrl); });
+  el('new-book').addEventListener('click', newBook);
   document.addEventListener('click', event => {
     const anchor = event.target.closest('a');
     if (apiClient.crossOrigin && anchor && localUrl(anchor.href)
@@ -689,7 +726,7 @@
   });
   el('previous-page').addEventListener('click', () => showPage(currentPage - 1));
   el('next-page').addEventListener('click', () => showPage(currentPage + 1));
-  el('page-navigation').addEventListener('submit', event => { event.preventDefault(); const page = Number(el('page-number').value); if (Number.isInteger(page) && page >= 1 && page <= reviewData.page_count) showPage(page); else el('page-number').value = currentPage; });
+  el('page-navigation').addEventListener('submit', event => { event.preventDefault(); const page = Number(el('page-number').value); if (Number.isInteger(page) && page >= 1 && page <= (reviewData || sourcePreview)?.page_count) showPage(page); else el('page-number').value = currentPage; });
   el('upload').addEventListener('submit', async event => {
     event.preventDefault(); clearTimeout(polling); releaseBrowserCopy();
     const file = el('pdf').files[0];

@@ -5,6 +5,10 @@ Public interface: https://thedtl.github.io/experimental_ToC_Creator_UI/
 Upload a scanned PDF or paste a public Dropbox PDF link, review and edit its
 bookmarks beside the single-page preview, then download the bookmarked PDF.
 The existing staff password is required. Processing runs in Google Cloud.
+The PDF is on the left and bookmarks on the right. An original-PDF preview
+appears after import/upload, while AI processing continues. **New book** returns
+to the input form without reloading or signing out; previous jobs retain their
+existing cleanup policy.
 
 This repository contains only browser assets. It contains no credentials,
 PDFs, job data or backend implementation. Requests go only to the experimental
