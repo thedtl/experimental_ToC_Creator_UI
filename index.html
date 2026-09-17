@@ -137,7 +137,7 @@
       <p class="small">Up to 512 MiB. Processing runs in Google Cloud. Keep this page open until it finishes. An interrupted job retains any available results but does not automatically resume.</p>
       <button id="submit">Create bookmarks</button>
     </form></details>
-    <p class="small muted">Downloading deletes this job's server copies after the complete PDF reaches your browser. Jobs also have a four-hour cleanup backstop. Keep the downloaded PDF.</p>
+    <p class="small muted">After a normal download, confirm that you saved the PDF to delete this job's server copies. Direct-to-disk saving deletes them after the file is written. Jobs also have a four-hour cleanup backstop.</p>
   </section>
   <progress id="progress" max="100" value="0" hidden></progress>
   <div id="status" class="status" role="status" aria-live="polite">Checking access…</div>
@@ -145,9 +145,9 @@
   <section id="workspace" hidden>
     <div id="review" hidden>
       <header class="review-heading">
-        <div><h1 id="review-title">Review your bookmarks</h1><p id="book-name"></p><p id="review-summary"></p></div><button id="download" type="button" hidden>Download & delete server copies</button>
+        <div><h1 id="review-title">Review your bookmarks</h1><p id="book-name"></p><p id="review-summary"></p></div><div class="actions"><button id="download" type="button" hidden>Download PDF</button><button id="direct-download" type="button" class="secondary" hidden>Save directly to disk</button></div>
       </header>
-      <p id="download-note" class="small muted">After the whole PDF reaches your browser, downloading permanently deletes the uploaded PDF, results, crops and extracted text from this job on the server. Previewing does not delete anything. The browser cannot confirm that you saved the file to disk.</p>
+      <p id="download-note" class="small muted">Download PDF uses your browser's normal download and keeps the full suggested name, including Korean and English. It holds a complete browser copy; for very large PDFs, Save directly to disk uses less memory, but its Mac save dialog may reject long names. After a normal download, click “I've saved it — delete server copies.” Direct saving deletes server copies once the file is written. Previewing never deletes anything.</p>
       <details id="naming-panel" class="naming">
         <summary>Download name & metadata<span id="filename-preview" aria-live="polite"></span></summary>
         <form id="naming-form" class="naming-fields">
@@ -182,10 +182,10 @@
       </div>
       <footer class="review-footer"><p id="review-note"></p><a id="exceptions" target="_blank" rel="noopener" hidden>Review details</a><span>Four-hour cleanup backstop.</span></footer>
     </div>
-    <div id="partial-links" class="actions" hidden><a id="partial-report" class="button secondary" target="_blank" rel="noopener" hidden>View available results</a><button id="partial-download" type="button" hidden>Download & delete server copies</button></div>
+    <div id="partial-links" class="actions" hidden><a id="partial-report" class="button secondary" target="_blank" rel="noopener" hidden>View available results</a><button id="partial-download" type="button" hidden>Download PDF</button><button id="partial-direct-download" type="button" class="secondary" hidden>Save directly to disk</button></div>
     <div id="download-actions" class="card" hidden>
       <p id="download-status" role="status" aria-live="polite"></p>
-      <div class="actions"><button id="cancel-download" type="button" class="secondary" hidden>Cancel transfer</button><button id="retry-delete" type="button" class="secondary" hidden>Retry server deletion</button><a id="save-again" class="button" hidden>Save browser copy again</a></div>
+      <div class="actions"><button id="cancel-download" type="button" class="secondary" hidden>Cancel transfer</button><button id="confirm-download" type="button" hidden>I've saved it — delete server copies</button><button id="retry-delete" type="button" class="secondary" hidden>Retry server deletion</button><a id="save-again" class="button" hidden>Download browser copy again</a></div>
       <p id="browser-copy-note" class="small muted" hidden>The PDF is held in this browser tab so you can save it again if needed. Keep this tab open until your saved file is safe. Leaving, signing out or starting another book releases this browser copy.</p>
     </div>
   </section>
@@ -248,8 +248,7 @@
     for (const control of el('bookmark-list').querySelectorAll('[data-editor-control]')) control.disabled = busy || control.dataset.unavailable === 'true';
     refreshUnmappedActions();
     for (const row of el('bookmark-list').children) row.draggable = !busy;
-    el('download').disabled = !!(transfer || deleting || savingBookmarks || dirty);
-    el('partial-download').disabled = !!(transfer || deleting || savingBookmarks || dirty);
+    for (const id of ['download', 'direct-download', 'partial-download', 'partial-direct-download']) el(id).disabled = busy || dirty;
   }
   function message(text, error = false) { el('status').hidden = !text; el('status').textContent = text; el('status').classList.toggle('error', error); fitReviewLayout(); }
   function fitBookmarkTitles() {
@@ -313,8 +312,8 @@
   function updateFilename() {
     if (!reviewData) return;
     const name = buildFilename(namingValues()); el('filename-preview').textContent = name;
-    const target = localUrl(reviewData.download_url); if (!target) { el('download').hidden = true; return; }
-    el('download').hidden = false; fitReviewLayout();
+    const target = localUrl(reviewData.download_url); if (!target) { el('download').hidden = el('direct-download').hidden = true; return; }
+    el('download').hidden = false; el('direct-download').hidden = typeof window.showSaveFilePicker !== 'function'; fitReviewLayout();
   }
   function releaseBrowserCopy() {
     viewAbort.abort(); viewAbort = new AbortController();
@@ -326,6 +325,7 @@
   function downloadBusy(busy) {
     refreshEditorState();
     el('retry-delete').disabled = busy;
+    el('confirm-download').disabled = busy;
   }
   function resetReview() {
     jobAbort.abort(); jobAbort = new AbortController();
@@ -351,10 +351,10 @@
     inputBusy(false); el('dropbox-url').focus();
   }
   async function deleteDownloadedJob() {
-    if (!pendingDeletion || deleting) return;
-    deleting = true; downloadBusy(true); el('retry-delete').hidden = true;
+    if (!pendingDeletion || deleting || !(pendingDeletion.savedToFile || pendingDeletion.confirmedByUser)) return;
+    deleting = true; downloadBusy(true); el('retry-delete').hidden = el('confirm-download').hidden = true;
     const receipt = pendingDeletion;
-    const delivery = receipt.savedToFile ? 'The browser finished writing your chosen file.' : 'Download started from the complete browser copy.';
+    const delivery = receipt.savedToFile ? 'The browser finished writing your chosen file.' : 'You confirmed that you saved the PDF.';
     el('download-status').textContent = delivery + ' Deleting this job’s server copies…';
     try {
       const result = await api('/api/jobs/' + receipt.job + '/download-complete', {
@@ -364,16 +364,21 @@
       if (result.deleted !== true) throw new Error('Server deletion was not confirmed.');
       pendingDeletion = null; clearDeletedReview(receipt.job);
       el('download-status').textContent = delivery + ' This job’s server copies are deleted. '
-        + (receipt.savedToFile ? 'Check your saved PDF before leaving.' : 'Saving to your disk is not observable by this page. Use “Save browser copy again” if the save was cancelled or blocked.');
+        + (receipt.savedToFile ? 'Check your saved PDF before leaving.' : 'The browser copy remains available below until you leave this tab or start another book.');
     } catch (error) {
       el('download-status').textContent = delivery + ' Server deletion was not confirmed: ' + error.message + ' Retry deletion below; do not assume the server copies are gone.';
       el('retry-delete').hidden = false;
     } finally { deleting = false; downloadBusy(false); }
   }
-  async function downloadAndDelete() {
+  async function confirmDownloadedFile() {
+    if (!pendingDeletion || transfer || deleting) return;
+    pendingDeletion.confirmedByUser = true;
+    await deleteDownloadedJob();
+  }
+  async function downloadAndDelete(directToDisk = false) {
     if (bookmarksDirty() || savingBookmarks) { message('Save or discard your bookmark edits before downloading.', true); return; }
     if (transfer || deleting) return;
-    if (pendingDeletion) { await deleteDownloadedJob(); return; }
+    if (pendingDeletion) { message('Confirm your saved PDF below, or download the retained browser copy again.'); return; }
     const data = reviewData || partialData, job = loadedReview || currentJob;
     const target = localUrl(data && data.download_url);
     if (!target || !job) { message('No available PDF to download.', true); return; }
@@ -382,13 +387,13 @@
     const url = new URL(target); url.searchParams.delete('inline'); url.searchParams.delete('download_name');
     if (expectedGeneration) url.searchParams.set('generation', expectedGeneration);
     transfer = new AbortController(); downloadBusy(true); el('download-actions').hidden = false;
-    el('cancel-download').hidden = false; el('retry-delete').hidden = true;
+    el('cancel-download').hidden = false; el('retry-delete').hidden = el('confirm-download').hidden = true;
     el('download-status').textContent = 'Receiving the complete PDF in your browser. Nothing will be deleted if this transfer fails or is cancelled.';
     let writer;
     try {
-      // Ask while the click still supplies a user gesture. Supported browsers
-      // stream directly to the chosen file, without retaining a book-sized Blob.
-      const file = typeof window.showSaveFilePicker === 'function'
+      // Direct saving is explicit: the Mac picker rejects some long Korean names
+      // that an ordinary download can save unchanged. Retain streaming for large PDFs.
+      const file = directToDisk && typeof window.showSaveFilePicker === 'function'
         ? await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'PDF document', accept: { 'application/pdf': ['.pdf'] } }] }) : null;
       if (transfer.signal.aborted) throw new DOMException('Transfer cancelled', 'AbortError');
       await pdfPreview.destroy();
@@ -425,13 +430,17 @@
         const save = el('save-again'); save.href = browserCopyUrl; save.download = name; save.hidden = false;
         el('browser-copy-note').hidden = false; save.click();
       }
-      pendingDeletion = { job, generation, savedToFile: !!file };
+      pendingDeletion = { job, generation, savedToFile: !!file, confirmedByUser: false };
+      if (!file) {
+        el('confirm-download').hidden = false;
+        el('download-status').textContent = 'Download sent to your browser. Check that the PDF is saved, then click “I\'ve saved it — delete server copies.” If it was blocked or cancelled, use “Download browser copy again.” Nothing has been deleted; the four-hour cleanup backstop still applies.';
+      }
     } catch (error) {
       if (writer) { try { await writer.abort(); } catch {} }
       transfer?.abort();
       el('download-status').textContent = (error.name === 'AbortError' ? 'Transfer cancelled.' : 'Download failed: ' + error.message) + ' No deletion acknowledgement was sent; the four-hour cleanup backstop still applies.';
     } finally { transfer = null; el('cancel-download').hidden = true; downloadBusy(false); }
-    if (pendingDeletion) await deleteDownloadedJob();
+    if (pendingDeletion?.savedToFile) await deleteDownloadedJob();
   }
   function addContributor(value = {}) {
     const row = document.createElement('div'); row.className = 'contributor-row';
@@ -578,7 +587,7 @@
     sourcePreview = source;
     document.body.classList.add('reviewing', 'source-preview');
     el('welcome').hidden = true; el('review').hidden = false; el('new-book').hidden = false;
-    for (const id of ['bookmark-panel', 'naming-panel', 'download-note', 'download', 'open-pdf', 'exceptions', 'partial-links', 'download-actions']) el(id).hidden = true;
+    for (const id of ['bookmark-panel', 'naming-panel', 'download-note', 'download', 'direct-download', 'open-pdf', 'exceptions', 'partial-links', 'download-actions']) el(id).hidden = true;
     el('review-title').textContent = 'Original PDF'; el('book-name').textContent = data.filename || 'Your scanned PDF';
     el('review-summary').textContent = source.page_count + ' pages · Original, not the bookmarked result';
     el('review-note').textContent = 'You can browse while processing continues. Bookmark editing and downloading appear when results are ready.';
@@ -602,6 +611,7 @@
     el('page-total').textContent = 'of ' + data.page_count; el('page-number').max = data.page_count;
     el('flags-only').checked = false; el('flags-only').disabled = flagged === 0;
     el('download').hidden = !localUrl(data.download_url || status.download_url); link('exceptions', data.exceptions_url);
+    el('direct-download').hidden = el('download').hidden || typeof window.showSaveFilePicker !== 'function';
     if (preserveNaming) updateFilename(); else initializeNaming(data, status);
     el('welcome').hidden = true; el('review').hidden = false; el('partial-links').hidden = true; el('new-book').hidden = false;
     document.body.classList.add('reviewing'); message(''); renderBookmarks(); showPage(page);
@@ -643,6 +653,7 @@
       el('start-job').disabled = startingJob === job;
       el('workspace').hidden = false; el('partial-links').hidden = inProgress || (!data.report_url && !data.download_url);
       link('partial-report', data.report_url); el('partial-download').hidden = inProgress || !localUrl(data.download_url);
+      el('partial-direct-download').hidden = el('partial-download').hidden || typeof window.showSaveFilePicker !== 'function';
       if (data.download_url && !inProgress) { if (loadedReview !== job) await loadReview(job, data); else el('partial-links').hidden = true; }
       else { displaySourcePreview(data); message((data.filename ? 'Book: ' + data.filename + '\n' : '') + (data.message || data.state), ['failed', 'interrupted'].includes(data.state)); }
       if (signal.aborted || job !== currentJob) return;
@@ -681,6 +692,7 @@
   });
   function confirmLeave() {
     if (savingBookmarks) { message('Wait until saving finishes before leaving.', true); return false; }
+    if (pendingDeletion && !window.confirm('Leave this download? Keep your saved PDF; leaving releases the browser copy without confirming server deletion. The four-hour cleanup backstop still applies.')) return false;
     return !bookmarksDirty() || window.confirm('Leave without saving your bookmark edits?');
   }
   el('logout').addEventListener('click', async () => {
@@ -695,12 +707,15 @@
     if (apiClient.crossOrigin && anchor && localUrl(anchor.href)
         && new URL(anchor.href).pathname.startsWith('/api/')) openProtectedView(event, anchor);
   });
-  window.addEventListener('beforeunload', event => { if (!leavingConfirmed && (bookmarksDirty() || savingBookmarks)) { event.preventDefault(); event.returnValue = ''; } });
+  window.addEventListener('beforeunload', event => { if (!leavingConfirmed && (bookmarksDirty() || savingBookmarks || transfer || pendingDeletion)) { event.preventDefault(); event.returnValue = ''; } });
   window.addEventListener('pagehide', () => { transfer?.abort(); pdfPreview.destroy(); releaseBrowserCopy(); });
   window.addEventListener('resize', fitReviewLayout);
   document.querySelector('.naming').addEventListener('toggle', fitReviewLayout);
-  el('download').addEventListener('click', downloadAndDelete);
-  el('partial-download').addEventListener('click', downloadAndDelete);
+  el('download').addEventListener('click', () => downloadAndDelete());
+  el('partial-download').addEventListener('click', () => downloadAndDelete());
+  el('direct-download').addEventListener('click', () => downloadAndDelete(true));
+  el('partial-direct-download').addEventListener('click', () => downloadAndDelete(true));
+  el('confirm-download').addEventListener('click', confirmDownloadedFile);
   el('cancel-download').addEventListener('click', () => transfer?.abort());
   el('retry-delete').addEventListener('click', deleteDownloadedJob);
   el('start-job').addEventListener('click', () => startAndWatch(currentJob));
