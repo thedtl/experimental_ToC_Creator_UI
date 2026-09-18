@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="bookmark-api" content="https://toc-bookmark-experimental-246902611372.us-central1.run.app">
+  <meta name="bookmark-api" content="https://toc-bookmark-experimental-246902611372.us-central1.run.app">
   <meta name="referrer" content="no-referrer">
   <title>PDF Bookmark Creator · Experimental</title>
   <style>
@@ -90,6 +90,7 @@
     .naming-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 15px; }
     .naming-fields label { margin: 0; font-size: 12px; }
     .naming-fields input, .contributor-row input, .contributor-row select { margin-top: 6px; padding: 9px; font-size: 13px; }
+    .naming-fields input[type="checkbox"] { width: auto; margin: 0 6px 0 0; padding: 0; }
     .wide { grid-column: 1 / -1; }
     .contributor-heading { display: flex; align-items: center; justify-content: space-between; }
     .contributor-heading button { padding: 6px 9px; font-size: 12px; }
@@ -143,6 +144,11 @@
   <div id="status" class="status" role="status" aria-live="polite">Checking access…</div>
   <button id="start-job" type="button" hidden>Start processing</button>
   <section id="workspace" hidden>
+    <div id="download-actions" class="card" hidden>
+      <p id="download-status" role="status" aria-live="polite"></p>
+      <div class="actions"><button id="cancel-download" type="button" class="secondary" hidden>Cancel transfer</button><button id="confirm-download" type="button" hidden>I've saved it — delete server copies</button><button id="retry-delete" type="button" class="secondary" hidden>Retry server deletion</button><a id="save-again" class="button" hidden>Download browser copy again</a></div>
+      <p id="browser-copy-note" class="small muted" hidden>The PDF is held in this browser tab so you can save it again if needed. Keep this tab open until your saved file is safe. Leaving, signing out or starting another book releases this browser copy.</p>
+    </div>
     <div id="review" hidden>
       <header class="review-heading">
         <div><h1 id="review-title">Review your bookmarks</h1><p id="book-name"></p><p id="review-summary"></p></div><div class="actions"><button id="download" type="button" hidden>Download PDF</button><button id="direct-download" type="button" class="secondary" hidden>Save directly to disk</button></div>
@@ -151,7 +157,8 @@
       <details id="naming-panel" class="naming">
         <summary>Download name & metadata<span id="filename-preview" aria-live="polite"></span></summary>
         <form id="naming-form" class="naming-fields">
-          <label class="wide" for="name-title">Title<input id="name-title" type="text" autocomplete="off"></label>
+          <label class="wide" for="name-title">Title (subtitles omitted from automatic names)<input id="name-title" type="text" autocomplete="off"></label>
+          <label class="wide" for="name-primary-translation"><input id="name-primary-translation" type="checkbox"> Translated primary-source edition (include translator credit; not modern scholarship)</label>
           <div class="wide">
             <div class="contributor-heading"><h2>Contributors</h2><button id="add-contributor" type="button" class="secondary">Add contributor</button></div>
             <div id="contributors"></div><p id="no-contributors" class="small muted">No contributors supplied. Add names if needed.</p>
@@ -159,7 +166,7 @@
           <label for="name-mms">MMS ID<input id="name-mms" type="text" inputmode="numeric" autocomplete="off"></label>
           <label for="name-oclc">OCLC number<input id="name-oclc" type="text" inputmode="numeric" autocomplete="off"></label>
           <label for="name-source">Source code<input id="name-source" type="text" autocomplete="off"></label>
-          <p id="naming-note" class="wide small muted">Uses the live service's filename rules. These edits change the download name only, not the PDF or its bookmarks. Check suggested metadata before downloading.</p>
+          <p id="naming-note" class="wide small muted">Uses the live filename rules, with Chicago translator credits for translated primary-source editions only. These edits change the download name only, not the PDF or its bookmarks. Check suggested metadata before downloading.</p>
         </form>
       </details>
       <div class="review-layout">
@@ -183,11 +190,6 @@
       <footer class="review-footer"><p id="review-note"></p><a id="exceptions" target="_blank" rel="noopener" hidden>Review details</a><span>Four-hour cleanup backstop.</span></footer>
     </div>
     <div id="partial-links" class="actions" hidden><a id="partial-report" class="button secondary" target="_blank" rel="noopener" hidden>View available results</a><button id="partial-download" type="button" hidden>Download PDF</button><button id="partial-direct-download" type="button" class="secondary" hidden>Save directly to disk</button></div>
-    <div id="download-actions" class="card" hidden>
-      <p id="download-status" role="status" aria-live="polite"></p>
-      <div class="actions"><button id="cancel-download" type="button" class="secondary" hidden>Cancel transfer</button><button id="confirm-download" type="button" hidden>I've saved it — delete server copies</button><button id="retry-delete" type="button" class="secondary" hidden>Retry server deletion</button><a id="save-again" class="button" hidden>Download browser copy again</a></div>
-      <p id="browser-copy-note" class="small muted" hidden>The PDF is held in this browser tab so you can save it again if needed. Keep this tab open until your saved file is safe. Leaving, signing out or starting another book releases this browser copy.</p>
-    </div>
   </section>
 </main>
 <script type="module">
@@ -306,7 +308,7 @@
     finally { pendingViews.delete(tab); }
   }
   function namingValues() {
-    return { title: el('name-title').value, mmsId: el('name-mms').value, oclc: el('name-oclc').value, sourceCode: el('name-source').value,
+    return { title: el('name-title').value, primarySourceTranslation: el('name-primary-translation').checked, mmsId: el('name-mms').value, oclc: el('name-oclc').value, sourceCode: el('name-source').value,
       contributors: [...el('contributors').children].map(row => ({ role: row.querySelector('select').value, last: row.querySelector('[data-field="last"]').value, first: row.querySelector('[data-field="first"]').value })) };
   }
   function updateFilename() {
@@ -340,9 +342,18 @@
     document.body.classList.remove('reviewing', 'source-preview'); history.replaceState(null, '', homeUrl); message('');
   }
   function clearDeletedReview(job) { deletedJob = job; resetReview(); }
-  function newBook() {
+  async function newBook() {
     if (['ready', 'queued', 'running', 'uploading'].includes(partialData?.state)) { message('Wait for this book to finish processing before starting another book.', true); return; }
-    if (editorBusy()) { message('Finish saving, downloading or confirming server deletion before starting another book.', true); return; }
+    if (savingBookmarks || transfer || deleting) { message('A save, transfer or server cleanup is still in progress. Its status is shown above the preview.', true); return; }
+    if (pendingDeletion) {
+      if (!pendingDeletion.savedToFile && !pendingDeletion.confirmedByUser
+          && !window.confirm('Is your downloaded PDF saved? Choose OK to delete this book’s server copies and start a new book. Choose Cancel to keep this book open.')) return;
+      await confirmDownloadedFile();
+      if (pendingDeletion) {
+        if (!window.confirm('Server deletion was not confirmed. Start a new book anyway? Your browser copy will be released; keep your saved PDF. The old job remains subject to the four-hour cleanup backstop. Choose Cancel to retry deletion here.')) return;
+        pendingDeletion = null;
+      }
+    }
     if (!confirmLeave()) return;
     releaseBrowserCopy(); resetReview(); deletedJob = null; leavingConfirmed = false;
     el('welcome').hidden = el('import').hidden = el('upload').hidden = el('file-upload-option').hidden = el('account-actions').hidden = false;
@@ -359,14 +370,14 @@
     try {
       const result = await api('/api/jobs/' + receipt.job + '/download-complete', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdf_generation: receipt.generation })
+        body: JSON.stringify({ pdf_generation: receipt.generation }), signal: AbortSignal.timeout(30000)
       });
       if (result.deleted !== true) throw new Error('Server deletion was not confirmed.');
       pendingDeletion = null; clearDeletedReview(receipt.job);
       el('download-status').textContent = delivery + ' This job’s server copies are deleted. '
         + (receipt.savedToFile ? 'Check your saved PDF before leaving.' : 'The browser copy remains available below until you leave this tab or start another book.');
     } catch (error) {
-      el('download-status').textContent = delivery + ' Server deletion was not confirmed: ' + error.message + ' Retry deletion below; do not assume the server copies are gone.';
+      el('download-status').textContent = delivery + ' Server deletion was not confirmed: ' + (error.name === 'TimeoutError' ? 'the request timed out after 30 seconds.' : error.message) + ' Retry deletion below, or use New book to continue with the four-hour cleanup backstop. Do not assume the server copies are gone.';
       el('retry-delete').hidden = false;
     } finally { deleting = false; downloadBusy(false); }
   }
@@ -387,6 +398,7 @@
     const url = new URL(target); url.searchParams.delete('inline'); url.searchParams.delete('download_name');
     if (expectedGeneration) url.searchParams.set('generation', expectedGeneration);
     transfer = new AbortController(); downloadBusy(true); el('download-actions').hidden = false;
+    el('download-actions').scrollIntoView({ block: 'start', behavior: 'smooth' });
     el('cancel-download').hidden = false; el('retry-delete').hidden = el('confirm-download').hidden = true;
     el('download-status').textContent = 'Receiving the complete PDF in your browser. Nothing will be deleted if this transfer fails or is cancelled.';
     let writer;
@@ -433,7 +445,7 @@
       pendingDeletion = { job, generation, savedToFile: !!file, confirmedByUser: false };
       if (!file) {
         el('confirm-download').hidden = false;
-        el('download-status').textContent = 'Download sent to your browser. Check that the PDF is saved, then click “I\'ve saved it — delete server copies.” If it was blocked or cancelled, use “Download browser copy again.” Nothing has been deleted; the four-hour cleanup backstop still applies.';
+        el('download-status').textContent = 'Transfer complete — waiting for your save confirmation, not still downloading. Once your PDF is saved, use New book or “I\'ve saved it — delete server copies.” If the save was blocked or cancelled, use “Download browser copy again.” Nothing has been deleted; the four-hour cleanup backstop still applies.';
       }
     } catch (error) {
       if (writer) { try { await writer.abort(); } catch {} }
@@ -445,7 +457,7 @@
   function addContributor(value = {}) {
     const row = document.createElement('div'); row.className = 'contributor-row';
     const roleLabel = document.createElement('label'); roleLabel.textContent = 'Role'; const role = document.createElement('select');
-    for (const [key, text] of [['author', 'Author'], ['editor', 'Editor'], ['compiler', 'Compiler']]) { const option = document.createElement('option'); option.value = key; option.textContent = text; role.append(option); }
+    for (const [key, text] of [['author', 'Author'], ['editor', 'Editor'], ['compiler', 'Compiler'], ['translator', 'Translator']]) { const option = document.createElement('option'); option.value = key; option.textContent = text; role.append(option); }
     role.value = value.role || 'author'; roleLabel.append(role); row.append(roleLabel);
     for (const [key, text] of [['last', 'Last name'], ['first', 'First name']]) { const label = document.createElement('label'); label.textContent = text; const input = document.createElement('input'); input.type = 'text'; input.dataset.field = key; input.autocomplete = 'off'; input.value = value[key] || ''; label.append(input); row.append(label); }
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'quiet'; remove.textContent = 'Remove';
@@ -456,8 +468,9 @@
     const values = defaultNamingMetadata(data.filename || status.filename || '', data.metadata || {});
     el('naming-note').textContent = (values.namingSource === 'source_filename'
       ? 'Title-page metadata was unavailable. This name comes from the source filename; check it before downloading. '
-      : 'Uses the live service’s filename rules. ') + 'These edits change the download name only, not the PDF or its bookmarks.';
+      : 'Uses the live filename rules, with Chicago translator credits for translated primary-source editions only. ') + 'These edits change the download name only, not the PDF or its bookmarks.';
     el('name-title').value = values.title || ''; el('name-mms').value = values.mmsId || ''; el('name-oclc').value = values.oclc || ''; el('name-source').value = values.sourceCode || '';
+    el('name-primary-translation').checked = values.primarySourceTranslation === true;
     el('contributors').replaceChildren(); for (const contributor of values.contributors || []) addContributor(contributor);
     el('no-contributors').hidden = el('contributors').children.length > 0;
     reviewData.download_url = data.download_url || status.download_url; updateFilename();

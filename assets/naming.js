@@ -7,7 +7,10 @@
  * buildFilename({title, contributors:[{role,last,first}], mmsId, oclc, sourceCode})
  * binds ordinary values instead of the live form. The filename formatter,
  * contributor credits, sanitization, ID extraction and metadata suggestions
- * remain the same. The experimental fallback uses the source name when visible
+ * retain the live convention, except filename suggestions omit subtitles.
+ * Confirmed primary-source translations add
+ * observed "Translated by" credits after the title; modern translations do not.
+ * The experimental fallback uses the source name when visible
  * metadata is missing and also preserves dot-form source codes (1.4330).
  * This module neither reads PDFs nor calls a provider.
  */
@@ -15,8 +18,9 @@ const CONTRIBUTOR_ROLES = {
   author: { label: "Author" },
   editor: { label: "Editor", primarySingle: "ed.", primaryPlural: "eds.", secondary: "Edited by" },
   compiler: { label: "Compiler", primarySingle: "comp.", primaryPlural: "comps.", secondary: "Compiled by" },
+  translator: { label: "Translator", secondary: "Translated by" },
 };
-const CONTRIBUTOR_ROLE_ORDER = ["author", "editor", "compiler"];
+const CONTRIBUTOR_ROLE_ORDER = ["author", "editor", "compiler", "translator"];
 
 function cleanFilenamePart(value) {
   return (value || "")
@@ -196,8 +200,8 @@ function containsNonLatinLetters(value) {
 }
 
 function suggestedTitleValue(metadata) {
-  const original = joinMetadataParts(metadata?.title_original, metadata?.subtitle_original);
-  const english = joinMetadataParts(metadata?.title_english, metadata?.subtitle_english);
+  const original = cleanFilenamePart(metadata?.title_original);
+  const english = cleanFilenamePart(metadata?.title_english);
   if (containsNonLatinLetters(original)) return bracketedEquivalent(original, english);
   return original || english;
 }
@@ -225,10 +229,19 @@ function contributorRoleFromMetadata(metadata) {
 
 function contributorRoleFromMetadataContributor(contributor) {
   const role = cleanFilenamePart(contributor?.role).toLowerCase();
+  if (role === "translator") return "translator";
   if (role.includes("edit")) return "editor";
   if (role.includes("compil")) return "compiler";
   if (!role || role.includes("author")) return "author";
   return "";
+}
+
+function suggestedNameParts(original, first, last, fallback) {
+  // A whole-name fallback is not evidence of a missing surname. A duplicated
+  // split may use the observed whole name once; raw fields and manual edits stay intact.
+  if (original && original === first && original === last) return { last: original, first: "" };
+  if (first || last) return { last, first };
+  return { last: fallback, first: "" };
 }
 
 function suggestedContributor(metadata) {
@@ -237,14 +250,9 @@ function suggestedContributor(metadata) {
   if (metadata.is_english === false) {
     return { role, last: suggestedAuthorDisplay(metadata), first: "" };
   }
-  if (cleanFilenamePart(metadata.author_last) || cleanFilenamePart(metadata.author_first)) {
-    return {
-      role,
-      last: metadata.author_last || suggestedAuthorDisplay(metadata),
-      first: metadata.author_first || "",
-    };
-  }
-  return { role, last: suggestedAuthorDisplay(metadata), first: "" };
+  return { role, ...suggestedNameParts(cleanFilenamePart(metadata.author_original),
+    cleanFilenamePart(metadata.author_first), cleanFilenamePart(metadata.author_last),
+    suggestedAuthorDisplay(metadata)) };
 }
 
 function suggestedContributorFromMetadataContributor(contributor, metadata) {
@@ -257,10 +265,7 @@ function suggestedContributorFromMetadataContributor(contributor, metadata) {
   if (metadata?.is_english === false && containsNonLatinLetters(original)) {
     return { role, last: bracketedEquivalent(original, romanized), first: "" };
   }
-  if (last || first) {
-    return { role, last: last || original || romanized, first };
-  }
-  return { role, last: original || romanized, first: "" };
+  return { role, ...suggestedNameParts(original, first, last, original || romanized) };
 }
 
 function suggestedContributors(metadata) {
@@ -271,15 +276,17 @@ function suggestedContributors(metadata) {
       .filter((contributor) => cleanFilenamePart(contributor.last) || cleanFilenamePart(contributor.first))
     : [];
   const primaryContributors = contributors.filter((contributor) => ["author", "editor"].includes(contributor.role));
-  if (primaryContributors.length) return primaryContributors;
+  const translators = metadata?.primary_source_translation === true
+    ? contributors.filter((contributor) => contributor.role === "translator") : [];
+  if (primaryContributors.length) return [...primaryContributors, ...translators];
   const compilerContributors = contributors.filter((contributor) => contributor.role === "compiler");
-  if (compilerContributors.length) return compilerContributors;
+  if (compilerContributors.length) return [...compilerContributors, ...translators];
 
   const legacyContributor = suggestedContributor(metadata);
-  if (!legacyContributor) return [];
+  if (!legacyContributor) return translators;
   return cleanFilenamePart(legacyContributor.last) || cleanFilenamePart(legacyContributor.first)
-    ? [legacyContributor]
-    : [];
+    ? [legacyContributor, ...translators]
+    : translators;
 }
 
 function metadataHasVisibleEvidence(metadata) {
@@ -290,7 +297,8 @@ function metadataHasVisibleEvidence(metadata) {
 export function buildFilename(values = {}) {
   const els = Object.fromEntries(["title", "mmsId", "oclc", "sourceCode"]
     .map((field) => [field, {value: values[field] || ""}]));
-  const getContributorsFromForm = () => normalizeContributors(values.contributors || []);
+  const getContributorsFromForm = () => normalizeContributors(values.contributors || [])
+    .filter((person) => person.role !== "translator" || values.primarySourceTranslation === true);
 
 function buildContributorCredits() {
   const contributors = getContributorsFromForm();
@@ -302,18 +310,19 @@ function buildContributorCredits() {
   if (byRole.author.length) {
     return {
       primary: joinContributorNames(byRole.author, true),
-      afterTitle: ["editor"]
+      afterTitle: ["editor", "translator"]
         .map((role) => secondaryContributorCredit(role, byRole[role] || []))
         .filter(Boolean),
     };
   }
 
   const primaryRole = byRole.editor.length ? "editor" : (byRole.compiler.length ? "compiler" : "");
-  if (!primaryRole) return { primary: "", afterTitle: [] };
+  const translationCredit = secondaryContributorCredit("translator", byRole.translator);
+  if (!primaryRole) return { primary: "", afterTitle: translationCredit ? [translationCredit] : [] };
 
   return {
     primary: primaryContributorCredit(primaryRole, byRole[primaryRole]),
-    afterTitle: [],
+    afterTitle: translationCredit ? [translationCredit] : [],
   };
 }
 
@@ -345,7 +354,7 @@ function buildOutputFilename() {
 /** Match live automatic suggestions; user edits are applied by the review form afterward. */
 export function defaultNamingMetadata(sourceFilename = "", observation = {}) {
   const identifiers = extractFilenameIdentifiers(sourceFilename);
-  const values = {title: identifiers.text, contributors: [], mmsId: identifiers.mmsId,
+  const values = {title: identifiers.text, contributors: [], primarySourceTranslation: false, mmsId: identifiers.mmsId,
     oclc: identifiers.oclc, sourceCode: identifiers.sourceCode,
     namingSource: identifiers.text ? "source_filename" : "missing"};
   if (!observation || observation.error
@@ -354,6 +363,7 @@ export function defaultNamingMetadata(sourceFilename = "", observation = {}) {
   const observedTitle = suggestedTitleValue(observation);
   if (observedTitle) {
     values.title = observedTitle; values.contributors = suggestedContributors(observation);
+    values.primarySourceTranslation = observation.primary_source_translation === true;
     values.namingSource = "title_page";
   }
   return values;
