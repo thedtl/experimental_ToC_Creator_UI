@@ -174,7 +174,7 @@
           <div class="list-tools"><h2>Bookmarks</h2><label class="filter"><input id="flags-only" type="checkbox"> Flagged only</label></div>
           <div class="editor-actions"><div class="actions"><button id="add-bookmark" type="button" class="secondary">Add bookmark</button><button id="save-bookmarks" type="button" disabled>Save all</button><button id="discard-bookmarks" type="button" class="quiet" disabled>Discard</button></div><p id="edit-status" role="status" aria-live="polite">No unsaved edits.</p></div>
           <nav class="bookmark-scroll" aria-label="Jump to a bookmark"><ol id="bookmark-list"></ol><p id="empty-list" class="empty" hidden></p>
-            <section id="unmapped-section" aria-label="Entries needing a destination" hidden><h2>Needs a destination</h2><p class="small">These entries were not automatically placed in the PDF. Find the right page in the preview, then add a bookmark. These original notes remain even after manual edits.</p><ul id="unmapped-list"></ul></section>
+            <section id="unmapped-section" aria-label="Entries needing a destination" hidden><h2>Needs a destination</h2><p class="small">Find the right page in the preview, then add the entry to your bookmarks. Placed entries leave this list. Use Save all to keep your edits.</p><ul id="unmapped-list"></ul></section>
           </nav>
           <p class="list-footnote">Use PDF page numbers. Drag a row above/below another to move it with its children; ↑/↓ move within its level. Deleting a parent keeps its children. Save before downloading. Existing review notes are retained.</p>
         </aside>
@@ -501,11 +501,22 @@
   function changedOutline(rows, focusId) {
     draftRows = rows; renderBookmarks(); if (focusId) focusBookmark(focusId);
   }
-  function addManualBookmark(title = '', unresolved = false) {
+  function addManualBookmark(title = '', unresolved = null) {
     if (editorBusy() || !reviewData || !Number.isInteger(currentPage) || currentPage < 1 || currentPage > reviewData.page_count) return;
-    const id = 'manual-' + crypto.randomUUID(); el('flags-only').checked = false;
+    const id = unresolved ? unresolved.id : 'manual-' + crypto.randomUUID();
+    if (!id || draftRows.some(row => row.id === id)) return;
+    el('flags-only').checked = false;
     changedOutline([...draftRows, { id, title, pdf_page: currentPage, level: 1, flagged: false,
       manual_note: unresolved ? 'Added from an unresolved entry at your chosen PDF page; not automatically checked.' : 'New bookmark; not automatically checked.' }], id);
+  }
+  function pendingUnmappedRows() {
+    const candidates = new Map((reviewData?.unmapped_rows || []).map(row => [row.id, row]));
+    // Saved manual placements retain their source, so deleting one can restore it.
+    for (const row of reviewData?.rows || []) {
+      if (row.original_review?.placement_status === 'unmapped') candidates.set(row.id, row.original_review);
+    }
+    const placed = new Set(draftRows.map(row => row.id));
+    return [...candidates.values()].filter(row => !placed.has(row.id));
   }
   function refreshUnmappedActions() {
     for (const button of el('unmapped-list').querySelectorAll('button')) {
@@ -516,8 +527,11 @@
   function renderUnmapped() {
     releaseCropViews();
     const list = el('unmapped-list'); list.replaceChildren();
-    const rows = Array.isArray(reviewData?.unmapped_rows) ? reviewData.unmapped_rows : [];
+    const rows = pendingUnmappedRows();
     el('unmapped-section').hidden = rows.length === 0;
+    const flagged = draftRows.filter(row => row.flagged === true).length;
+    el('review-summary').textContent = draftRows.length + ' bookmarks · ' + (flagged === 0 ? 'No active review flags' : flagged + ' need review')
+      + (rows.length ? ' · ' + rows.length + ' need a destination' : '') + ' · ' + reviewData.page_count + ' pages';
     for (const row of rows) {
       const item = document.createElement('li'), title = document.createElement('strong'), reason = document.createElement('p');
       title.textContent = row.display_title || row.title || 'Unreadable Contents entry'; item.append(title);
@@ -533,7 +547,7 @@
         image.alt = 'Contents crop for ' + title.textContent; link.append(image); item.append(link);
       }
       const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary';
-      button.addEventListener('click', () => addManualBookmark(row.display_title || row.title || '', true));
+      button.addEventListener('click', () => addManualBookmark(row.display_title || row.title || '', row));
       item.append(button); list.append(item);
     }
     refreshUnmappedActions();
@@ -617,9 +631,6 @@
     reviewData = data; draftRows = data.rows.map(row => ({ ...row })); savedBookmarkJson = JSON.stringify(bookmarkFields(draftRows));
     const flagged = data.rows.filter(row => row.flagged === true).length;
     el('book-name').textContent = data.filename || status.filename || 'Your bookmarked PDF';
-    const unmapped = Array.isArray(data.unmapped_rows) ? data.unmapped_rows.length : 0;
-    el('review-summary').textContent = data.rows.length + ' bookmarks · ' + (flagged === 0 ? 'No active review flags' : flagged + ' need review')
-      + (unmapped ? ' · ' + unmapped + ' need a destination' : '') + ' · ' + data.page_count + ' pages';
     el('review-note').textContent = typeof data.review_note === 'string' ? data.review_note : 'Click a bookmark to inspect its destination, then download your PDF.';
     el('page-total').textContent = 'of ' + data.page_count; el('page-number').max = data.page_count;
     el('flags-only').checked = false; el('flags-only').disabled = flagged === 0;
