@@ -486,12 +486,12 @@
     return body;
   }
   function showPage(page, rowId = null) {
-    const preview = reviewData || sourcePreview;
+    const preview = sourcePreview?.job === currentJob ? sourcePreview : reviewData;
     if (!preview || !Number.isInteger(page) || page < 1 || page > preview.page_count) return;
     currentPage = page; activeRow = rowId; el('page-number').value = page;
     el('previous-page').disabled = page === 1; el('next-page').disabled = page === preview.page_count;
     const url = localUrl(preview.pdf_url);
-    pdfPreview.show(url, page); el('open-pdf').href = url + '#page=' + page;
+    pdfPreview.show(url, page); el('open-pdf').href = localUrl(reviewData?.pdf_url || preview.pdf_url) + '#page=' + page;
     for (const item of el('bookmark-list').children) item.querySelector('.bookmark').setAttribute('aria-current', String(item.dataset.rowId === rowId));
     refreshUnmappedActions();
   }
@@ -611,7 +611,7 @@
     const source = data.source_preview;
     if (reviewData || !source || !Number.isInteger(source.page_count) || source.page_count < 1 || !localUrl(source.pdf_url)) return;
     const changed = sourcePreview?.pdf_url !== source.pdf_url;
-    sourcePreview = source;
+    sourcePreview = { ...source, job: currentJob };
     document.body.classList.add('reviewing', 'source-preview');
     el('welcome').hidden = true; el('review').hidden = false; el('new-book').hidden = false;
     for (const id of ['bookmark-panel', 'naming-panel', 'download-note', 'download', 'direct-download', 'open-pdf', 'exceptions', 'partial-links', 'download-actions']) el(id).hidden = true;
@@ -625,7 +625,10 @@
   function displayReview(data, status = {}, preserveNaming = false) {
     if (!Array.isArray(data.rows) || !Number.isInteger(data.page_count) || data.page_count < 1 || !localUrl(data.pdf_url)) throw new Error('The PDF is available, but its review data could not be loaded. Use the download link below.');
     const page = preserveNaming || sourcePreview ? Math.min(currentPage, data.page_count) : 1;
-    sourcePreview = null; document.body.classList.remove('source-preview');
+    // Processing/outline edits do not change page pixels. Keep the original already in the viewer.
+    if (sourcePreview?.job !== currentJob || sourcePreview?.page_count !== data.page_count
+        || !pdfPreview.canReuse(localUrl(sourcePreview.pdf_url))) sourcePreview = null;
+    document.body.classList.remove('source-preview');
     for (const id of ['bookmark-panel', 'naming-panel', 'download-note', 'open-pdf']) el(id).hidden = false;
     el('review-title').textContent = 'Review your bookmarks';
     reviewData = data; draftRows = data.rows.map(row => ({ ...row })); savedBookmarkJson = JSON.stringify(bookmarkFields(draftRows));
@@ -656,7 +659,7 @@
     if (!/^\d+$/.test(String(reviewData.pdf_generation || ''))) { message('The PDF generation is unavailable. Refresh before editing.', true); return; }
     savingBookmarks = true; refreshEditorState();
     try {
-      await pdfPreview.destroy();
+      if (sourcePreview?.job !== currentJob || !pdfPreview.canReuse(localUrl(sourcePreview.pdf_url))) await pdfPreview.destroy();
       const data = await api('/api/jobs/' + loadedReview + '/bookmarks', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pdf_generation: String(reviewData.pdf_generation), bookmarks }) });
       displayReview(data, {}, true); message('Bookmark edits saved. Existing reading and review notes are retained.');

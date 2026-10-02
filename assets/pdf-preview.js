@@ -15,7 +15,8 @@ export function createPdfPreview(holder, status, loadLibrary = () => import('/as
   async function load(url) {
     if (current?.url === url) return current.ready;
     const closing = closeDocument();
-    const state = { url, abort: new AbortController(), queue: Promise.resolve() };
+    const state = { url, abort: new AbortController(), pending: [], active: 0 };
+    state.abort.signal.addEventListener('abort', () => { state.pending.length = 0; }, { once: true });
     current = state;
     state.ready = (async () => {
       await closing;
@@ -38,24 +39,35 @@ export function createPdfPreview(holder, status, loadLibrary = () => import('/as
       // HEAD + explicit ranges avoids a whole-book download for range detection.
       const range = new pdfjs.PDFDataRangeTransport(length, new Uint8Array(0), true);
       range.abort = () => state.abort.abort();
+      async function fetchRange(begin, end) {
+        if (![begin, end].every(Number.isSafeInteger) || begin < 0 || end <= begin || end > length) throw new Error('Invalid preview byte range');
+        const response = await request(url, { ...options, headers: { Range: `bytes=${begin}-${end - 1}` } });
+        if (response.status !== 206 || response.headers.get('Content-Range') !== `bytes ${begin}-${end - 1}/${length}`
+            || response.headers.get('ETag') !== etag) {
+          await response.body?.cancel();
+          throw new Error('The requested PDF range is unavailable. Refresh this job; no full-file fallback was used.');
+        }
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (state.abort.signal.aborted) return;
+        if (bytes.length !== end - begin) throw new Error('The preview range was incomplete');
+        range.onDataRange(begin, bytes);
+      }
+      function failed(error) {
+        if (state.abort.signal.aborted) return;
+        state.error = error;
+        if (current === state) status.textContent = 'Preview unavailable: ' + error.message + ' Your bookmarks and download remain available.';
+        state.abort.abort(); state.task?.destroy().catch(() => {});
+      }
+      function drain() {
+        // Parallelize only PDF.js-requested ranges, with bounded memory/network use.
+        while (!state.abort.signal.aborted && state.active < 4 && state.pending.length) {
+          const [begin, end] = state.pending.shift(); state.active++;
+          fetchRange(begin, end).catch(failed).finally(() => { state.active--; drain(); });
+        }
+      }
       range.requestDataRange = (begin, end) => {
-        state.queue = state.queue.then(async () => {
-          if (![begin, end].every(Number.isSafeInteger) || begin < 0 || end <= begin || end > length) throw new Error('Invalid preview byte range');
-          const response = await request(url, { ...options, headers: { Range: `bytes=${begin}-${end - 1}` } });
-          if (response.status !== 206 || response.headers.get('Content-Range') !== `bytes ${begin}-${end - 1}/${length}`
-              || response.headers.get('ETag') !== etag) {
-            await response.body?.cancel();
-            throw new Error('The requested PDF range is unavailable. Refresh this job; no full-file fallback was used.');
-          }
-          const bytes = new Uint8Array(await response.arrayBuffer());
-          if (bytes.length !== end - begin) throw new Error('The preview range was incomplete');
-          range.onDataRange(begin, bytes);
-        }).catch(error => {
-          if (state.abort.signal.aborted) return;
-          state.error = error;
-          if (current === state) status.textContent = 'Preview unavailable: ' + error.message + ' Your bookmarks and download remain available.';
-          state.abort.abort(); state.task?.destroy().catch(() => {});
-        });
+        if (state.abort.signal.aborted) return;
+        state.pending.push([begin, end]); drain();
       };
       state.task = pdfjs.getDocument({ range, rangeChunkSize: 1024 * 1024,
         disableAutoFetch: true, disableStream: true,
@@ -63,7 +75,7 @@ export function createPdfPreview(holder, status, loadLibrary = () => import('/as
         standardFontDataUrl: assetUrl('/assets/pdfjs/standard_fonts/'),
         wasmUrl: assetUrl('/assets/pdfjs/wasm/'), iccUrl: assetUrl('/assets/pdfjs/iccs/') });
       return state.task.promise;
-    })();
+    })().catch(error => { state.error = error; throw error; });
     return state.ready;
   }
 
@@ -98,8 +110,11 @@ export function createPdfPreview(holder, status, loadLibrary = () => import('/as
       canvas.dataset.page = String(pageNumber); canvas.hidden = false;
       status.textContent = 'PDF page ' + pageNumber + ' of ' + pdf.numPages;
     } catch (error) {
-      if (request === sequence && !cancelled(error)) status.textContent = 'Preview unavailable: '
-        + (current?.error || error).message + ' Your bookmarks and download remain available.';
+      if (request === sequence && !cancelled(error)) {
+        if (current) current.error ||= error;
+        status.textContent = 'Preview unavailable: '
+          + (current?.error || error).message + ' Your bookmarks and download remain available.';
+      }
     } finally {
       if (request === sequence) { renderTask = null; holder.setAttribute('aria-busy', 'false'); }
     }
@@ -117,5 +132,6 @@ export function createPdfPreview(holder, status, loadLibrary = () => import('/as
       if (wanted) show(wanted.url, wanted.pageNumber);
     }, 120);
   }).observe(holder);
-  return { show, destroy };
+  return { show, destroy, canReuse: url => !!url && current?.url === new URL(url, location.href).href
+    && !current.abort.signal.aborted && !current.error };
 }
