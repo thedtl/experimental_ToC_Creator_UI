@@ -7,7 +7,7 @@
  * buildFilename({title, contributors:[{role,last,first}], mmsId, oclc, sourceCode})
  * binds ordinary values instead of the live form. The filename formatter,
  * contributor credits, sanitization, ID extraction and metadata suggestions
- * retain the live convention, except filename suggestions omit subtitles.
+ * retain the live convention, including observed titles and subtitles.
  * Confirmed primary-source translations add
  * observed "Translated by" credits after the title; modern translations do not.
  * The experimental fallback uses the source name when visible
@@ -202,8 +202,16 @@ function containsNonLatinLetters(value) {
 function suggestedTitleValue(metadata) {
   const original = cleanFilenamePart(metadata?.title_original);
   const english = cleanFilenamePart(metadata?.title_english);
-  if (containsNonLatinLetters(original)) return bracketedEquivalent(original, english);
-  return original || english;
+  const originalFull = original ? joinMetadataParts(original, metadata?.subtitle_original) : "";
+  const englishFull = english ? joinMetadataParts(english, metadata?.subtitle_english) : "";
+  const title = containsNonLatinLetters(original) ? bracketedEquivalent(originalFull, englishFull) : originalFull || englishFull;
+  // Only the explicit observation grants work-volume scope; never mine subtitles
+  // or filenames for a number. This suggestion remains editable like any title.
+  const volume = typeof metadata?.work_volume === "string" ? cleanFilenamePart(metadata.work_volume) : "";
+  if (!title || !volume) return title;
+  const literalVolume = volume.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  if (new RegExp(`(^|[^\\p{L}\\p{N}\\p{M}])${literalVolume}($|[^\\p{L}\\p{N}\\p{M}])`, "iu").test(title)) return title;
+  return `${title}${/[.!?。！？]$/u.test(title) ? " " : ". "}${volume}`;
 }
 
 function suggestedAuthorDisplay(metadata) {
