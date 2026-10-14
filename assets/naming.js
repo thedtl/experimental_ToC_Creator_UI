@@ -204,14 +204,23 @@ function suggestedTitleValue(metadata) {
   const english = cleanFilenamePart(metadata?.title_english);
   const originalFull = original ? joinMetadataParts(original, metadata?.subtitle_original) : "";
   const englishFull = english ? joinMetadataParts(english, metadata?.subtitle_english) : "";
-  const title = containsNonLatinLetters(original) ? bracketedEquivalent(originalFull, englishFull) : originalFull || englishFull;
-  // Only the explicit observation grants work-volume scope; never mine subtitles
-  // or filenames for a number. This suggestion remains editable like any title.
+  let title = containsNonLatinLetters(original) ? bracketedEquivalent(originalFull, englishFull) : originalFull || englishFull;
+  // Only explicit scoped observations grant volume/series inclusion; never mine
+  // subtitles, notes or filenames. These suggestions remain editable as one title.
   const volume = typeof metadata?.work_volume === "string" ? cleanFilenamePart(metadata.work_volume) : "";
-  if (!title || !volume) return title;
-  const literalVolume = volume.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-  if (new RegExp(`(^|[^\\p{L}\\p{N}\\p{M}])${literalVolume}($|[^\\p{L}\\p{N}\\p{M}])`, "iu").test(title)) return title;
-  return `${title}${/[.!?。！？]$/u.test(title) ? " " : ". "}${volume}`;
+  title = appendObservedTitleDetail(title, volume);
+  const series = typeof metadata?.bible_commentary_series === "string" ? cleanFilenamePart(metadata.bible_commentary_series) : "";
+  const seriesVolume = typeof metadata?.bible_commentary_volume === "string" ? cleanFilenamePart(metadata.bible_commentary_volume) : "";
+  // An orphan number is not enough to identify a commentary series. Compare the
+  // complete series label, so a title such as "2 Kings" cannot swallow volume 2.
+  return appendObservedTitleDetail(title, series ? [series, seriesVolume].filter(Boolean).join(", ") : "");
+}
+
+function appendObservedTitleDetail(title, detail) {
+  if (!title || !detail) return title;
+  const literal = detail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  if (new RegExp(`(^|[^\\p{L}\\p{N}\\p{M}])${literal}($|[^\\p{L}\\p{N}\\p{M}])`, "iu").test(title)) return title;
+  return `${title}${/[.!?。！？]$/u.test(title) ? " " : ". "}${detail}`;
 }
 
 function suggestedAuthorDisplay(metadata) {
