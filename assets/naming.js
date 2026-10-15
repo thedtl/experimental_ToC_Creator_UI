@@ -325,6 +325,9 @@ function buildContributorCredits() {
   }, {});
 
   if (byRole.author.length) {
+    // Do not repeat an already credited author as translator; retain distinct names.
+    const authorNames = new Set(byRole.author.map(person => contributorName(person).toLocaleLowerCase()));
+    byRole.translator = byRole.translator.filter(person => !authorNames.has(contributorName(person).toLocaleLowerCase()));
     return {
       primary: joinContributorNames(byRole.author, true),
       afterTitle: ["editor", "translator"]
