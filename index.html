@@ -157,7 +157,9 @@
       <details id="naming-panel" class="naming">
         <summary>Download name & metadata<span id="filename-preview" aria-live="polite"></span></summary>
         <form id="naming-form" class="naming-fields">
-          <label class="wide" for="name-title">Title, subtitle, commentary series & volume<input id="name-title" type="text" autocomplete="off"></label>
+          <label class="wide" for="name-title">Title & subtitle<input id="name-title" type="text" autocomplete="off"></label>
+          <label for="name-commentary-series">Bible commentary series<input id="name-commentary-series" type="text" autocomplete="off"></label>
+          <label for="name-commentary-volume">Commentary volume<input id="name-commentary-volume" type="text" autocomplete="off" placeholder="e.g. 40 or 40B"></label>
           <label class="wide" for="name-primary-translation"><input id="name-primary-translation" type="checkbox"> Translated primary-source edition (include translator credit; not modern scholarship)</label>
           <div class="wide">
             <div class="contributor-heading"><h2>Contributors</h2><button id="add-contributor" type="button" class="secondary">Add contributor</button></div>
@@ -193,7 +195,7 @@
   </section>
 </main>
 <script type="module">
-  import { buildFilename, defaultNamingMetadata } from './assets/naming.js';
+  import { buildFilename, defaultNamingMetadata } from './assets/naming.js?v=commentary-fields-20261014';
   import { createPdfPreview } from './assets/pdf-preview.js';
   import { createApiClient } from './assets/api-client.js';
   const el = id => document.getElementById(id);
@@ -309,6 +311,7 @@
   }
   function namingValues() {
     return { title: el('name-title').value, primarySourceTranslation: el('name-primary-translation').checked, mmsId: el('name-mms').value, oclc: el('name-oclc').value, sourceCode: el('name-source').value,
+      commentarySeries: el('name-commentary-series').value, commentaryVolume: el('name-commentary-volume').value,
       contributors: [...el('contributors').children].map(row => ({ role: row.querySelector('select').value, last: row.querySelector('[data-field="last"]').value, first: row.querySelector('[data-field="first"]').value })) };
   }
   function updateFilename() {
@@ -336,7 +339,7 @@
     draftRows = []; savedBookmarkJson = '[]'; currentPage = 1; draggedRow = null;
     el('pdf-holder').replaceChildren(); el('bookmark-list').replaceChildren(); el('unmapped-list').replaceChildren(); el('unmapped-section').hidden = true; el('contributors').replaceChildren();
     for (const id of ['book-name', 'review-summary', 'review-note', 'filename-preview']) el(id).textContent = '';
-    for (const id of ['name-title', 'name-mms', 'name-oclc', 'name-source', 'pdf', 'dropbox-url']) el(id).value = '';
+    for (const id of ['name-title', 'name-commentary-series', 'name-commentary-volume', 'name-mms', 'name-oclc', 'name-source', 'pdf', 'dropbox-url']) el(id).value = '';
     for (const id of ['open-pdf', 'exceptions', 'partial-report']) el(id).removeAttribute('href');
     el('review').hidden = el('partial-links').hidden = true; el('new-book').hidden = false;
     document.body.classList.remove('reviewing', 'source-preview'); history.replaceState(null, '', homeUrl); message('');
@@ -470,6 +473,7 @@
       ? 'Title-page metadata was unavailable. This name comes from the source filename; check it before downloading. '
       : 'Uses the live filename rules, with Chicago translator credits for translated primary-source editions only. ') + 'These edits change the download name only, not the PDF or its bookmarks.';
     el('name-title').value = values.title || ''; el('name-mms').value = values.mmsId || ''; el('name-oclc').value = values.oclc || ''; el('name-source').value = values.sourceCode || '';
+    el('name-commentary-series').value = values.commentarySeries || ''; el('name-commentary-volume').value = values.commentaryVolume || '';
     el('name-primary-translation').checked = values.primarySourceTranslation === true;
     el('contributors').replaceChildren(); for (const contributor of values.contributors || []) addContributor(contributor);
     el('no-contributors').hidden = el('contributors').children.length > 0;
@@ -645,7 +649,17 @@
   }
   async function loadReview(job, status) {
     const signal = jobAbort.signal;
-    const data = await api('/api/jobs/' + job + '/review', { signal });
+    let data;
+    try { data = await api('/api/jobs/' + job + '/review', { signal }); }
+    catch (error) {
+      // A failed outline read must not discard metadata already saved for naming.
+      // Load before offering direct save: the picker needs the click's activation.
+      if (!signal.aborted && currentJob === job && status.artifacts?.includes('metadata.json')) {
+        try { status.metadata = await api('/api/jobs/' + job + '/artifacts/metadata.json',
+          { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) }); } catch {}
+      }
+      throw error;
+    }
     if (signal.aborted || currentJob !== job || job === deletedJob || bookmarksDirty() || savingBookmarks) return;
     loadedReview = job; displayReview(data, status);
   }
@@ -681,7 +695,13 @@
       el('workspace').hidden = false; el('partial-links').hidden = inProgress || (!data.report_url && !data.download_url);
       link('partial-report', data.report_url); el('partial-download').hidden = inProgress || !localUrl(data.download_url);
       el('partial-direct-download').hidden = el('partial-download').hidden || typeof window.showSaveFilePicker !== 'function';
-      if (data.download_url && !inProgress) { if (loadedReview !== job) await loadReview(job, data); else el('partial-links').hidden = true; }
+      if (data.download_url && !inProgress) {
+        el('partial-links').hidden = true;
+        if (loadedReview !== job) {
+          try { await loadReview(job, data); }
+          catch (error) { if (!signal.aborted && job === currentJob) el('partial-links').hidden = false; throw error; }
+        }
+      }
       else { displaySourcePreview(data); message((data.filename ? 'Book: ' + data.filename + '\n' : '') + (data.message || data.state), ['failed', 'interrupted'].includes(data.state)); }
       if (signal.aborted || job !== currentJob) return;
       if (inProgress) polling = setTimeout(() => poll(job), 5000); else inputBusy(false);

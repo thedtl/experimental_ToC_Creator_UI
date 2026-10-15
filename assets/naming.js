@@ -205,15 +205,9 @@ function suggestedTitleValue(metadata) {
   const originalFull = original ? joinMetadataParts(original, metadata?.subtitle_original) : "";
   const englishFull = english ? joinMetadataParts(english, metadata?.subtitle_english) : "";
   let title = containsNonLatinLetters(original) ? bracketedEquivalent(originalFull, englishFull) : originalFull || englishFull;
-  // Only explicit scoped observations grant volume/series inclusion; never mine
-  // subtitles, notes or filenames. These suggestions remain editable as one title.
+  // Work-volume designations remain part of the editable title suggestion.
   const volume = typeof metadata?.work_volume === "string" ? cleanFilenamePart(metadata.work_volume) : "";
-  title = appendObservedTitleDetail(title, volume);
-  const series = typeof metadata?.bible_commentary_series === "string" ? cleanFilenamePart(metadata.bible_commentary_series) : "";
-  const seriesVolume = typeof metadata?.bible_commentary_volume === "string" ? cleanFilenamePart(metadata.bible_commentary_volume) : "";
-  // An orphan number is not enough to identify a commentary series. Compare the
-  // complete series label, so a title such as "2 Kings" cannot swallow volume 2.
-  return appendObservedTitleDetail(title, series ? [series, seriesVolume].filter(Boolean).join(", ") : "");
+  return appendObservedTitleDetail(title, volume);
 }
 
 function appendObservedTitleDetail(title, detail) {
@@ -348,7 +342,12 @@ function buildContributorCredits() {
 
 function buildOutputFilename() {
   const contributorCredits = buildContributorCredits();
-  const title = cleanFilenamePart(els.title.value) || "Untitled";
+  const series = cleanFilenamePart(values.commentarySeries);
+  const volume = cleanFilenamePart(values.commentaryVolume);
+  // Keep commentary fields through title edits; never parse 40B as a number.
+  // An orphan volume cannot identify a series. Users can clear either field.
+  const title = appendObservedTitleDetail(cleanFilenamePart(els.title.value) || "Untitled",
+    series ? [series, volume].filter(Boolean).join(", ") : "");
   const mmsId = normalizeIdentifier(els.mmsId.value);
   const oclc = cleanFilenamePart(els.oclc.value);
   const sourceCode = normalizeSourceCode(els.sourceCode.value);
@@ -374,7 +373,7 @@ function buildOutputFilename() {
 /** Match live automatic suggestions; user edits are applied by the review form afterward. */
 export function defaultNamingMetadata(sourceFilename = "", observation = {}) {
   const identifiers = extractFilenameIdentifiers(sourceFilename);
-  const values = {title: identifiers.text, contributors: [], primarySourceTranslation: false, mmsId: identifiers.mmsId,
+  const values = {title: identifiers.text, commentarySeries: "", commentaryVolume: "", contributors: [], primarySourceTranslation: false, mmsId: identifiers.mmsId,
     oclc: identifiers.oclc, sourceCode: identifiers.sourceCode,
     namingSource: identifiers.text ? "source_filename" : "missing"};
   if (!observation || observation.error
@@ -383,6 +382,8 @@ export function defaultNamingMetadata(sourceFilename = "", observation = {}) {
   const observedTitle = suggestedTitleValue(observation);
   if (observedTitle) {
     values.title = observedTitle; values.contributors = suggestedContributors(observation);
+    values.commentarySeries = typeof observation.bible_commentary_series === "string" ? cleanFilenamePart(observation.bible_commentary_series) : "";
+    values.commentaryVolume = typeof observation.bible_commentary_volume === "string" ? cleanFilenamePart(observation.bible_commentary_volume) : "";
     values.primarySourceTranslation = observation.primary_source_translation === true;
     values.namingSource = "title_page";
   }
