@@ -158,6 +158,7 @@
         <summary>Download name & metadata<span id="filename-preview" aria-live="polite"></span></summary>
         <form id="naming-form" class="naming-fields">
           <label class="wide" for="name-title">Title & subtitle<input id="name-title" type="text" autocomplete="off"></label>
+          <label for="name-edition">Edition<input id="name-edition" type="text" autocomplete="off" placeholder="e.g. 2nd ed. or Revised edition"></label>
           <label for="name-commentary-series">Bible commentary series<input id="name-commentary-series" type="text" autocomplete="off"></label>
           <label for="name-commentary-volume">Commentary volume<input id="name-commentary-volume" type="text" autocomplete="off" placeholder="e.g. 40 or 40B"></label>
           <label class="wide" for="name-primary-translation"><input id="name-primary-translation" type="checkbox"> Translated primary-source edition (include translator credit; not modern scholarship)</label>
@@ -195,7 +196,7 @@
   </section>
 </main>
 <script type="module">
-  import { buildFilename, defaultNamingMetadata } from './assets/naming.js?v=commentary-fields-20261014';
+  import { buildFilename, defaultNamingMetadata } from './assets/naming.js?v=edition-20261104';
   import { createPdfPreview } from './assets/pdf-preview.js';
   import { createApiClient } from './assets/api-client.js';
   const el = id => document.getElementById(id);
@@ -311,7 +312,7 @@
   }
   function namingValues() {
     return { title: el('name-title').value, primarySourceTranslation: el('name-primary-translation').checked, mmsId: el('name-mms').value, oclc: el('name-oclc').value, sourceCode: el('name-source').value,
-      commentarySeries: el('name-commentary-series').value, commentaryVolume: el('name-commentary-volume').value,
+      edition: el('name-edition').value, commentarySeries: el('name-commentary-series').value, commentaryVolume: el('name-commentary-volume').value,
       contributors: [...el('contributors').children].map(row => ({ role: row.querySelector('select').value, last: row.querySelector('[data-field="last"]').value, first: row.querySelector('[data-field="first"]').value })) };
   }
   function updateFilename() {
@@ -339,7 +340,7 @@
     draftRows = []; savedBookmarkJson = '[]'; currentPage = 1; draggedRow = null;
     el('pdf-holder').replaceChildren(); el('bookmark-list').replaceChildren(); el('unmapped-list').replaceChildren(); el('unmapped-section').hidden = true; el('contributors').replaceChildren();
     for (const id of ['book-name', 'review-summary', 'review-note', 'filename-preview']) el(id).textContent = '';
-    for (const id of ['name-title', 'name-commentary-series', 'name-commentary-volume', 'name-mms', 'name-oclc', 'name-source', 'pdf', 'dropbox-url']) el(id).value = '';
+    for (const id of ['name-title', 'name-edition', 'name-commentary-series', 'name-commentary-volume', 'name-mms', 'name-oclc', 'name-source', 'pdf', 'dropbox-url']) el(id).value = '';
     for (const id of ['open-pdf', 'exceptions', 'partial-report']) el(id).removeAttribute('href');
     el('review').hidden = el('partial-links').hidden = true; el('new-book').hidden = false;
     document.body.classList.remove('reviewing', 'source-preview'); history.replaceState(null, '', homeUrl); message('');
@@ -473,6 +474,7 @@
       ? 'Title-page metadata was unavailable. This name comes from the source filename; check it before downloading. '
       : 'Uses the live filename rules, with Chicago translator credits for translated primary-source editions only. ') + 'These edits change the download name only, not the PDF or its bookmarks.';
     el('name-title').value = values.title || ''; el('name-mms').value = values.mmsId || ''; el('name-oclc').value = values.oclc || ''; el('name-source').value = values.sourceCode || '';
+    el('name-edition').value = values.edition || '';
     el('name-commentary-series').value = values.commentarySeries || ''; el('name-commentary-volume').value = values.commentaryVolume || '';
     el('name-primary-translation').checked = values.primarySourceTranslation === true;
     el('contributors').replaceChildren(); for (const contributor of values.contributors || []) addContributor(contributor);

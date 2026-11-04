@@ -346,7 +346,8 @@ function buildOutputFilename() {
   const volume = cleanFilenamePart(values.commentaryVolume);
   // Keep commentary fields through title edits; never parse 40B as a number.
   // An orphan volume cannot identify a series. Users can clear either field.
-  const title = appendObservedTitleDetail(cleanFilenamePart(els.title.value) || "Untitled",
+  const title = appendObservedTitleDetail(
+    appendObservedTitleDetail(cleanFilenamePart(els.title.value) || "Untitled", cleanFilenamePart(values.edition)),
     series ? [series, volume].filter(Boolean).join(", ") : "");
   const mmsId = normalizeIdentifier(els.mmsId.value);
   const oclc = cleanFilenamePart(els.oclc.value);
@@ -373,7 +374,7 @@ function buildOutputFilename() {
 /** Match live automatic suggestions; user edits are applied by the review form afterward. */
 export function defaultNamingMetadata(sourceFilename = "", observation = {}) {
   const identifiers = extractFilenameIdentifiers(sourceFilename);
-  const values = {title: identifiers.text, commentarySeries: "", commentaryVolume: "", contributors: [], primarySourceTranslation: false, mmsId: identifiers.mmsId,
+  const values = {title: identifiers.text, edition: "", commentarySeries: "", commentaryVolume: "", contributors: [], primarySourceTranslation: false, mmsId: identifiers.mmsId,
     oclc: identifiers.oclc, sourceCode: identifiers.sourceCode,
     namingSource: identifiers.text ? "source_filename" : "missing"};
   if (!observation || observation.error
@@ -382,6 +383,7 @@ export function defaultNamingMetadata(sourceFilename = "", observation = {}) {
   const observedTitle = suggestedTitleValue(observation);
   if (observedTitle) {
     values.title = observedTitle; values.contributors = suggestedContributors(observation);
+    values.edition = typeof observation.edition === "string" ? cleanFilenamePart(observation.edition) : "";
     values.commentarySeries = typeof observation.bible_commentary_series === "string" ? cleanFilenamePart(observation.bible_commentary_series) : "";
     values.commentaryVolume = typeof observation.bible_commentary_volume === "string" ? cleanFilenamePart(observation.bible_commentary_volume) : "";
     values.primarySourceTranslation = observation.primary_source_translation === true;
