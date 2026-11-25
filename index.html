@@ -128,6 +128,7 @@
     <form id="login" hidden>
       <label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required><button>Continue</button>
     </form>
+    <label id="chapter-request-option" hidden><input id="chapter-request-book" type="checkbox" style="width:auto; margin-right:6px"> Chapter Request Book <span class="small muted">(adds ∗ to the filename)</span></label>
     <form id="import" hidden>
       <label for="dropbox-url">Paste a Dropbox or Internet Archive PDF link</label><input id="dropbox-url" type="url" autocomplete="off" placeholder="https://www.dropbox.com/… or https://archive.org/download/…/book.pdf" maxlength="4096" required>
       <p class="small">The PDF goes directly from Dropbox to Google Cloud. Nothing needs to be downloaded to your computer first. Keep this page open until it finishes.</p>
@@ -195,7 +196,7 @@
   </section>
 </main>
 <script type="module">
-  import { buildFilename, defaultNamingMetadata } from './assets/naming.js?v=edition-20261104';
+  import { buildFilename, defaultNamingMetadata } from './assets/naming.js?v=chapter-request-20261125';
   import { createPdfPreview } from './assets/pdf-preview.js';
   import { createApiClient } from './assets/api-client.js';
   const el = id => document.getElementById(id);
@@ -270,7 +271,10 @@
       - parseFloat(getComputedStyle(document.body).paddingBottom))) + 'px';
     fitBookmarkTitles();
   }
-  function inputBusy(busy) { for (const id of ['submit', 'import-submit', 'pdf', 'dropbox-url']) el(id).disabled = busy; }
+  function inputBusy(busy) {
+    for (const id of ['submit', 'import-submit', 'pdf', 'dropbox-url']) el(id).disabled = busy;
+    el('chapter-request-book').disabled = busy || !!currentJob;
+  }
   function localUrl(value) {
     if (typeof value !== 'string' || !value) return null;
     try { return apiClient.url(value); } catch { return null; }
@@ -315,6 +319,7 @@
   }
   function namingValues() {
     return { title: el('name-title').value, primarySourceTranslation: el('name-primary-translation').checked, mmsId: el('name-mms').value, oclc: el('name-oclc').value, sourceCode: el('name-source').value,
+      chapterRequestBook: reviewData?.chapter_request_book === true,
       edition: el('name-edition').value, commentarySeries: el('name-commentary-series').value, commentaryVolume: el('name-commentary-volume').value,
       contributors: [...el('contributors').children].map(row => ({ role: row.querySelector('select').value, last: row.querySelector('[data-field="last"]').value, first: row.querySelector('[data-field="first"]').value })) };
   }
@@ -344,6 +349,7 @@
     el('pdf-holder').replaceChildren(); el('bookmark-list').replaceChildren(); el('unmapped-list').replaceChildren(); el('unmapped-section').hidden = true; el('contributors').replaceChildren();
     for (const id of ['book-name', 'review-summary', 'review-note', 'filename-preview']) el(id).textContent = '';
     for (const id of ['name-title', 'name-edition', 'name-commentary-series', 'name-commentary-volume', 'name-mms', 'name-oclc', 'name-source', 'pdf', 'dropbox-url']) el(id).value = '';
+    el('chapter-request-book').checked = false;
     for (const id of ['open-pdf', 'exceptions', 'partial-report']) el(id).removeAttribute('href');
     el('review').hidden = el('partial-links').hidden = true; el('new-book').hidden = false;
     document.body.classList.remove('reviewing', 'source-preview'); history.replaceState(null, '', homeUrl); message('');
@@ -404,7 +410,8 @@
     const data = reviewData || partialData, job = loadedReview || currentJob;
     const target = localUrl(data && data.download_url);
     if (!target || !job) { message('No available PDF to download.', true); return; }
-    const name = buildFilename(reviewData ? namingValues() : defaultNamingMetadata(data.filename || '', data.metadata || {}));
+    const name = buildFilename(reviewData ? namingValues() : {
+      ...defaultNamingMetadata(data.filename || '', data.metadata || {}), chapterRequestBook: data.chapter_request_book === true });
     const expectedGeneration = data.pdf_generation ? String(data.pdf_generation) : null;
     const url = new URL(target); url.searchParams.delete('inline'); url.searchParams.delete('download_name');
     if (expectedGeneration) url.searchParams.set('generation', expectedGeneration);
@@ -492,7 +499,7 @@
     let body; try { body = await response.json(); } catch { body = {}; }
     if (options.signal?.aborted) throw new DOMException('Previous book closed', 'AbortError');
     if (!response.ok) {
-      if (response.status === 403) { el('welcome').hidden = false; el('login').hidden = false; el('upload').hidden = el('import').hidden = el('file-upload-option').hidden = true; el('workspace').hidden = true; el('account-actions').hidden = true; }
+      if (response.status === 403) { el('welcome').hidden = false; el('login').hidden = false; el('upload').hidden = el('import').hidden = el('file-upload-option').hidden = el('chapter-request-option').hidden = true; el('workspace').hidden = true; el('account-actions').hidden = true; }
       throw Object.assign(new Error(typeof body.detail === 'string' ? body.detail : 'Request failed (' + response.status + ').'), { status: response.status });
     }
     return body;
@@ -697,6 +704,7 @@
       const data = await api('/api/jobs/' + job, { signal }), inProgress = ['ready', 'queued', 'running', 'uploading'].includes(data.state);
       if (signal.aborted || job !== currentJob || job === deletedJob) return;
       currentJob = job; partialData = data;
+      el('chapter-request-book').checked = data.chapter_request_book === true;
       if (data.state !== 'ready' && startingJob === job) startingJob = null;
       el('start-job').hidden = data.state !== 'ready';
       el('start-job').disabled = startingJob === job;
@@ -738,6 +746,7 @@
   }
   async function ready() {
     el('login').hidden = true; el('upload').hidden = el('import').hidden = el('file-upload-option').hidden = false; el('workspace').hidden = false; el('account-actions').hidden = false; message('');
+    el('chapter-request-option').hidden = false;
     const job = new URLSearchParams(location.search).get('job'); if (job && /^[0-9a-f]{32}$/.test(job)) { currentJob = job; message('Loading your book…'); await poll(job); }
   }
   el('login').addEventListener('submit', async event => {
@@ -779,7 +788,7 @@
     el('progress').hidden = el('partial-links').hidden = true;
     message('Importing your PDF from Dropbox and processing it in Google Cloud… Keep this page open.');
     try {
-      const data = await api('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: el('dropbox-url').value.trim() }) });
+      const data = await api('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: el('dropbox-url').value.trim(), chapter_request_book: el('chapter-request-book').checked }) });
       if (!/^[0-9a-f]{32}$/.test(data.id || '')) throw new Error('No job ID was returned; completion is NOT OBSERVED.');
       await startAndWatch(data.id);
     } catch (error) { message(error.message, true); inputBusy(false); }
@@ -803,7 +812,7 @@
     if (!file || file.size > 512 * 1024 * 1024) { message('Choose a PDF no larger than 512 MiB.', true); return; }
     inputBusy(true); el('progress').hidden = false; el('partial-links').hidden = true;
     try {
-      const job = await api('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name, size: file.size }) });
+      const job = await api('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name, size: file.size, chapter_request_book: el('chapter-request-book').checked }) });
       const chunkSize = job.chunk_size;
       for (let start = 0, index = 0; start < file.size; start += chunkSize, index++) {
         await api('/api/jobs/' + job.id + '/chunks/' + index, { method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: file.slice(start, start + chunkSize) });

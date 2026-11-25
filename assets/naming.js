@@ -365,7 +365,7 @@ function buildOutputFilename() {
   let base = pieces.join(". ").replace(/\.\s*\./g, ".").trim();
   base = base.replace(/\s+\./g, ".").replace(/\s+/g, " ");
 
-  return `${base} [Bookmarked].pdf`;
+  return `${values.chapterRequestBook === true && !base.startsWith("∗") ? "∗" : ""}${base} [Bookmarked].pdf`;
 }
 
   return buildOutputFilename();
